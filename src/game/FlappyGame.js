@@ -3,12 +3,23 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from './Constants';
 import frostiUrl from '../assets/Frosti.webp';
 import candyIconUrl from '../assets/Candy Icon.webp';
 
+// Breakpoints: phone < 480, tablet < 768, desktop >= 768
+function getFlappyScale(width) {
+    if (width < 480) return 0.6;
+    if (width < 768) return 0.8;
+    return 1;
+}
+
 export class FlappyGame extends Game {
     constructor(canvas, onGameOver, onCurrencyUpdate) {
         super(canvas, onGameOver);
         this.onCurrencyUpdate = onCurrencyUpdate;
 
-        // Player properties
+        this.pipeWidthBase = 100;
+        this.pipeGapBase = 250;
+        this.speedBase = 300;
+        this.playerWidthBase = 73.5;
+
         this.player = {
             x: 100,
             y: this.height / 2,
@@ -26,15 +37,27 @@ export class FlappyGame extends Game {
 
         this.pipes = [];
         this.pipeTimer = 0;
-        this.pipeInterval = 2.0; // seconds
+        this.pipeInterval = 2.0;
         this.pipeWidth = 100;
         this.pipeGap = 250;
-        this.speed = 300; // pixels per second
+        this.speed = 300;
 
         this.notifications = [];
         this.nextNotificationId = 0;
 
+        this.applyBreakpoints();
+
         this.loadAssets();
+    }
+
+    applyBreakpoints() {
+        const scale = getFlappyScale(this.width);
+        this.pipeWidth = this.pipeWidthBase * scale;
+        this.pipeGap = this.pipeGapBase * scale;
+        this.speed = this.speedBase * scale;
+        this.player.width = this.playerWidthBase * scale;
+        this.player.height = this.playerWidthBase * scale;
+        this.player.x = Math.min(100, 80 * scale + 20);
     }
 
     async loadAssets() {
@@ -60,6 +83,7 @@ export class FlappyGame extends Game {
 
     update(dt) {
         if (this.isStopped || this.isPaused) return;
+        this.applyBreakpoints();
         super.update(dt);
 
         // Player physics

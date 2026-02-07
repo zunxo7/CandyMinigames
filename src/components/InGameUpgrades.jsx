@@ -10,7 +10,10 @@ const STAT_CONFIG = [
     { id: 'health', name: 'Max Health', icon: Heart, color: '#55efc4', desc: 'Increase your vitality' },
 ];
 
-const InGameUpgrades = ({ runStats, currency, onBuy, onClose }) => {
+const InGameUpgrades = ({ runStats, currency, onBuy, onClose, statsOnly }) => {
+    const config = statsOnly?.length
+        ? STAT_CONFIG.filter(s => statsOnly.includes(s.id))
+        : STAT_CONFIG;
     return (
         <div className="stats-overlay" onClick={onClose}>
             <div className="stats-content" onClick={e => e.stopPropagation()}>
@@ -25,7 +28,7 @@ const InGameUpgrades = ({ runStats, currency, onBuy, onClose }) => {
                 </div>
 
                 <div className="stats-grid">
-                    {STAT_CONFIG.map((stat) => {
+                    {config.map((stat) => {
                         const level = runStats[stat.id] || 0;
                         const cost = 20 + (level * 5);
                         const canAfford = currency >= cost;

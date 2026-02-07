@@ -34,7 +34,7 @@ export class Player {
         // Invincibility
         this.invincible = false;
         this.invincibleTimer = 0;
-        this.invincibleDuration = 2.0;
+        this.invincibleDuration = 1.0;
 
         // Base stats
         this.baseSpeed = PLAYER_SPEED;
@@ -158,8 +158,8 @@ export class Player {
         const input = this.game.input;
         let moving = false;
 
-        // Handle Jumping
-        if (input.isDown(' ') && this.isGrounded) {
+        // Handle Jumping (up arrow or W; space is used for attack)
+        if ((input.isDown('ArrowUp') || input.isDown('w')) && this.isGrounded) {
             this.jump();
         }
 

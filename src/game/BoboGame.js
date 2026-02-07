@@ -62,11 +62,12 @@ class BoboPlayer {
     }
 
     update(dt) {
+        const speedBonus = (this.game.runStats?.speed || 0) * 40;
         if (this.speedBuffTimer > 0) {
             this.speedBuffTimer -= dt;
-            this.speed = this.baseSpeed * 1.5;
+            this.speed = (this.baseSpeed + speedBonus) * 1.5;
         } else {
-            this.speed = this.baseSpeed;
+            this.speed = this.baseSpeed + speedBonus;
         }
 
         this.vx = 0;
@@ -227,6 +228,8 @@ export class BoboGame extends Game {
 
         this.lives = 3;
         this.score = 0;
+        this.runStats = { speed: 0 };
+        this.spentCandies = 0;
 
         // Combo: consecutive sweets add +2 each, reset on veggie or miss
         this.consecutiveSweets = 0;
@@ -241,6 +244,19 @@ export class BoboGame extends Game {
         this.nextNotificationId = 0;
 
         this.speedSpawnTimer = 0;
+    }
+
+    buyStatUpgrade(statName) {
+        if (statName !== 'speed') return false;
+        const level = this.runStats.speed || 0;
+        const cost = 20 + (level * 5);
+        const available = this.score - this.spentCandies;
+        if (available < cost) return false;
+        this.spentCandies += cost;
+        this.runStats.speed = level + 1;
+        if (this.onCurrencyUpdate) this.onCurrencyUpdate(this.score - this.spentCandies);
+        this.addNotification('Speed upgraded!', 'info');
+        return true;
     }
 
     addNotification(text, type = 'info') {

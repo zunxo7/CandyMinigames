@@ -81,10 +81,10 @@ export class PinataGame extends Game {
         if (this.isPaused) return;
         super.update(dt);
 
-        // Update score/currency (standardized ~25–35/min: 1 candy per 3s + kills)
+        // Update score/currency (standardized ~25–35/min: 1 candy per 3s + kills); clamp so it never goes negative
         const timeCandies = Math.floor(this.survivalTime / 3);
-        this.currency = (timeCandies + this.killCandies) - this.spentCandies;
-        this.score = this.currency; // Final score reflects spent candies
+        this.currency = Math.max(0, (timeCandies + this.killCandies) - this.spentCandies);
+        this.score = this.currency;
 
         if (!this.player || this.player.hp <= 0) return;
 

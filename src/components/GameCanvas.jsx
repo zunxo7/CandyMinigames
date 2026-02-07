@@ -165,6 +165,10 @@ const GameCanvas = ({ gameType, onBack }) => {
                 if (gameType === 'pinata' && game.runStats) {
                     setRunStats({ ...game.runStats });
                 }
+                if (gameType === 'cake') {
+                    if (game.runStats) setRunStats({ ...game.runStats });
+                    setCurrency(Math.max(0, (game.score ?? 0) - (game.spentCandies ?? 0)));
+                }
             }
         }, 32);
 
@@ -269,6 +273,20 @@ const GameCanvas = ({ gameType, onBack }) => {
 
     const healthPercent = (playerHealth.hp / playerHealth.maxHp) * 100;
 
+    useEffect(() => {
+        if (gameType !== 'flappy' && gameType !== 'pinata') return;
+        const onKey = (e) => {
+            if (e.key !== ' ') return;
+            const g = gameRef.current;
+            if (g && !gameOverRef.current && !g.isStopped && !g.isPaused) {
+                e.preventDefault();
+                g.handleInput('attack');
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [gameType]);
+
     return (
         <div
             className={`game-container ${gameOver ? 'cursor-default' : 'cursor-crosshair'}`}
@@ -304,7 +322,7 @@ const GameCanvas = ({ gameType, onBack }) => {
                         <span>{currency}</span>
                     </div>
 
-                    {gameType === 'pinata' && !gameOver && (
+                    {(gameType === 'pinata' || gameType === 'cake') && !gameOver && (
                         <button
                             className="hud-stats-btn"
                             onClick={() => {
@@ -375,6 +393,20 @@ const GameCanvas = ({ gameType, onBack }) => {
                 <InGameUpgrades
                     runStats={runStats}
                     currency={currency}
+                    onBuy={(stat) => {
+                        if (gameRef.current) gameRef.current.buyStatUpgrade(stat);
+                    }}
+                    onClose={() => {
+                        setShowStats(false);
+                        if (gameRef.current) gameRef.current.resume();
+                    }}
+                />
+            )}
+            {gameType === 'cake' && showStats && (
+                <InGameUpgrades
+                    runStats={runStats}
+                    currency={currency}
+                    statsOnly={['speed']}
                     onBuy={(stat) => {
                         if (gameRef.current) gameRef.current.buyStatUpgrade(stat);
                     }}

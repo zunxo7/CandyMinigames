@@ -54,10 +54,10 @@ const Leaderboard = ({ onBack }) => {
         if (error) {
             console.error('Error fetching leaderboard:', error);
         } else {
-            // Normalize data structure: always have 'score' property
-            setPlayers(data.map(p => ({
+            const list = (data || []).filter(p => (p.username || '').toLowerCase() !== 'admin');
+            setPlayers(list.map(p => ({
                 ...p,
-                score: category === 'overall' ? p.candies : p.score // Map candies to score for overall
+                score: category === 'overall' ? p.candies : p.score
             })));
         }
         setLoading(false);
