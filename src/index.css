@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+/* Main CSS Entry Point */
+
+/* Utilities & Globals */
+@import './styles/variables.css';
+@import './styles/global.css';
+
+/* Animations */
+@import './styles/animations.css';
+
+/* Authentication */
+@import './styles/auth.css';
+
+/* Components & Features */
+@import './styles/effects.css';
+@import './styles/main-menu.css';
+@import './styles/game-selection.css';
+@import './styles/game.css';
+@import './styles/shop.css';
+@import './styles/leaderboard.css';
+@import './styles/content-editor.css';
+@import './styles/upgrades.css';
+@import './styles/announcements.css';
+@import './styles/admin.css';

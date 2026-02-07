@@ -1,0 +1,439 @@
+/* ===== GAME CANVAS & HUD ===== */
+.game-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+.game-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* HUD Elements - fixed so back/pause stay at viewport top in all games */
+.game-hud {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    padding: 1rem;
+    z-index: 10;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    pointer-events: none;
+}
+
+.hud-left {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.hud-pause-btn {
+    width: 48px;
+    height: 48px;
+    background: white;
+    border: 3px solid #2d2d2d;
+    border-radius: 50%;
+    color: #2d2d2d;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.hud-pause-btn:hover {
+    transform: scale(1.05);
+    background: #f0f0f0;
+}
+
+.hud-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.hud-candy-display {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: white;
+    padding: 0.5rem 1rem;
+    border-radius: 50px;
+    border: 3px solid #2d2d2d;
+    font-weight: 800;
+    color: #2d2d2d;
+}
+
+.hud-stats-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    background: white;
+    border: 3px solid #2d2d2d;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 0.8rem;
+    color: #2d2d2d;
+    box-shadow: 0 4px 0 #2d2d2d;
+    transition: all 0.1s;
+    pointer-events: auto;
+}
+
+.hud-stats-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #2d2d2d;
+}
+
+.hud-stats-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 0 0 #2d2d2d;
+}
+
+.health-container {
+    background: white;
+    border: 3px solid #2d2d2d;
+    border-radius: 16px;
+    padding: 0.5rem 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 150px;
+}
+
+.health-container.health-hearts {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: auto;
+}
+
+.health-hearts .heart-icon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.health-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.health-text {
+    font-size: 0.85rem;
+    font-weight: bold;
+}
+
+.health-bar-bg {
+    width: 100%;
+    height: 10px;
+    background: #ffe6ed;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 2px solid #2d2d2d;
+}
+
+.health-bar-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+    background: #ff6b9d;
+}
+
+.health-bar-fill.low-health {
+    background: #e74c3c;
+}
+
+/* Notifications */
+.notifications-container {
+    position: absolute;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-end;
+    pointer-events: none;
+}
+
+.notifications-container.notifications-below-lives {
+    position: static;
+    margin-top: 0.25rem;
+}
+
+.buff-toast {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border: 3px solid #2d2d2d;
+    padding: 0.4rem 1rem;
+    border-radius: 50px;
+    color: white;
+    font-weight: 800;
+    font-size: 0.9rem;
+}
+
+.buff-speed {
+    background: linear-gradient(135deg, #3498db, #f1c40f);
+}
+
+.buff-knockback {
+    background: linear-gradient(135deg, #e74c3c, #ff6b6b);
+}
+
+.notification-toast {
+    padding: 0.6rem 1.25rem;
+    border-radius: 50px;
+    font-size: 1rem;
+    font-weight: 800;
+    border: 3px solid #2d2d2d;
+    animation: toastSlideIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.toast-candy {
+    background: white;
+}
+
+.toast-flappyCandy {
+    background: linear-gradient(135deg, #4facfe, #ffffff);
+}
+
+.toast-heal {
+    background: #55efc4;
+}
+
+.toast-damage {
+    background: #ff6b6b;
+}
+
+.toast-pickle {
+    background: linear-gradient(135deg, #55efc4, #00d26a);
+    color: #1a3d2a;
+}
+
+/* Game Over Overlay */
+.game-over-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    backdrop-filter: blur(5px);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.game-over-overlay.mode-flappy {
+    background: rgba(235, 248, 255, 0.95);
+}
+
+.game-over-overlay.mode-pinata {
+    background: rgba(255, 245, 248, 0.95);
+}
+
+.game-over-overlay.mode-cake {
+    background: rgba(245, 235, 220, 0.95);
+}
+
+.game-over-title {
+    font-size: 4rem;
+    font-weight: 900;
+    margin-bottom: 1.5rem;
+}
+
+.mode-flappy .game-over-title {
+    color: #4facfe;
+}
+
+.mode-pinata .game-over-title {
+    color: #e84a7f;
+}
+
+.mode-cake .game-over-title {
+    color: #8B4513;
+}
+
+.game-over-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: white;
+    border: 3px solid #2d2d2d;
+    padding: 2.5rem;
+    border-radius: 32px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+}
+
+.game-paused-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 260px;
+}
+
+.game-paused-buttons .resume-btn {
+    background: var(--color-primary, #ff6b9d);
+    color: white;
+    border-color: #2d2d2d;
+}
+
+.game-paused-buttons .return-from-pause-btn {
+    background: var(--color-primary, #ff6b9d);
+    color: white;
+    white-space: nowrap;
+}
+
+.score-display {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+}
+
+.final-score {
+    font-size: 2.5rem;
+    font-weight: 900;
+}
+
+.best-score-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    background: #f5f5f5;
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+}
+
+.return-btn {
+    padding: 1.25rem 3.5rem;
+    font-size: 1.3rem;
+    font-weight: 900;
+    border-radius: 20px;
+    border: 3px solid #2d2d2d;
+    cursor: pointer;
+    transition: transform 0.2s;
+    color: white;
+    white-space: nowrap;
+}
+
+.mode-flappy .return-btn {
+    background: #4facfe;
+    border-color: #2d2d2d;
+}
+
+.mode-pinata .return-btn {
+    background: #ff6b9d;
+    border-color: #2d2d2d;
+}
+
+.mode-cake .return-btn {
+    background: #8B4513;
+    border-color: #2d2d2d;
+}
+
+.return-btn:hover {
+    transform: scale(1.05);
+}
+
+/* Pre-start Overlay */
+.pre-start-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pre-start-card {
+    background: white;
+    padding: 3.5rem;
+    border-radius: 48px;
+    border: 4px solid #74b9ff;
+    text-align: center;
+    animation: float 3s infinite ease-in-out;
+}
+
+.get-ready-text {
+    font-size: 3.5rem;
+    font-weight: 900;
+    color: #74b9ff;
+    margin-bottom: 1rem;
+}
+
+.tap-icon-circle {
+    width: 70px;
+    height: 70px;
+    background: #74b9ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    animation: pulse-glow 2s infinite;
+}
+
+.tap-text {
+    font-weight: 900;
+    font-size: 1.8rem;
+    color: #74b9ff;
+    letter-spacing: 2px;
+}
+
+/* Helper Classes */
+.cursor-crosshair {
+    cursor: crosshair;
+}
+
+.cursor-default {
+    cursor: default;
+}
+
+.candy-icon-large {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.pre-start-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.buff-time {
+    opacity: 0.8;
+    font-size: 0.75rem;
+}
+
+.best-label {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #666;
+}
+
+.best-score-value {
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: #2d2d2d;
+}

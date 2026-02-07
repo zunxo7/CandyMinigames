@@ -1,0 +1,40 @@
+:root {
+    /* Pink & White Color Palette */
+    --color-primary: #ff6b9d;
+    --color-primary-dark: #e84a7f;
+    --color-primary-light: #ffb3c6;
+    --color-secondary: #ff9ec4;
+    --color-accent: #ffd93d;
+
+    /* Theme colors */
+    --bg-main: #fff5f8;
+    --bg-card: #ffffff;
+    --bg-card-hover: #fff0f5;
+
+    /* Text */
+    --text-primary: #2d2d2d;
+    --text-secondary: #666666;
+    --text-muted: #999999;
+
+    /* Borders */
+    --border-dark: #2d2d2d;
+    --border-light: #ffccd9;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, #ff6b9d 0%, #ff9ec4 100%);
+    --gradient-bg: linear-gradient(180deg, #fff5f8 0%, #ffe6ed 100%);
+
+    /* Effects */
+    --shadow-sm: 0 2px 8px rgba(255, 107, 157, 0.15);
+    --shadow-md: 0 4px 16px rgba(255, 107, 157, 0.2);
+    --shadow-lg: 0 8px 32px rgba(255, 107, 157, 0.25);
+
+    /* Radius */
+    --radius-sm: 8px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
+
+    /* Font */
+    --font-main: 'Outfit', sans-serif;
+}

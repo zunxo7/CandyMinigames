@@ -1,0 +1,147 @@
+/* ===== GLOBAL EFFECTS ===== */
+.admin-toast,
+.error-toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: white;
+    padding: 0.8rem 1.5rem;
+    border-radius: 50px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    z-index: 10000;
+    animation: toastSlideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    font-weight: 700;
+    border: 3px solid var(--border-dark);
+}
+
+.error-toast {
+    top: 1rem;
+    bottom: auto;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    background: #e74c3c;
+    color: white;
+    border: none;
+    animation: slideDown 0.3s ease;
+}
+
+.admin-toast.success {
+    background: #d4edda;
+    color: #155724;
+    border-color: #2d2d2d;
+}
+
+.admin-toast.error {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #2d2d2d;
+}
+
+@keyframes toastSlideIn {
+    from {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes toastSlideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+}
+
+.floating-heart {
+    position: absolute;
+    bottom: -50px;
+    left: var(--heart-left);
+    animation: floatHeart var(--heart-duration) ease-in infinite;
+    animation-delay: var(--heart-delay);
+    opacity: 0;
+    z-index: 1000;
+}
+
+@keyframes floatHeart {
+    0% {
+        transform: translateY(0) scale(0.5) rotate(0deg);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(-100vh) scale(1.5) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+.birthday-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: fadeIn 0.5s ease;
+}
+
+.birthday-content {
+    text-align: center;
+    color: white;
+    animation: bounceIn 1s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.birthday-content h1 {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    text-shadow: 0 0 20px #ff6b9d;
+}
+
+.birthday-name {
+    font-size: 5rem;
+    font-weight: 900;
+    background: linear-gradient(to right, #ff6b9d, #ffd93d, #ff9ec4);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
+}
+
+.global-effects-container {
+    transition: opacity 1s ease-out;
+}
+
+.global-effects-container.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.global-effects-fixed {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 9999;
+}
