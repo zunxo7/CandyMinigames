@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning, GameController, ArrowCounterClockwise } from '@phosphor-icons/react';
+import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning, GameController, ArrowCounterClockwise, Prohibit } from '@phosphor-icons/react';
 import { supabase } from '../supabase';
 import ContentEditor from './ContentEditor';
 import AnnouncementManager from './AnnouncementManager';
@@ -332,6 +332,21 @@ const AdminPanel = ({ onBack }) => {
         if (!error) {
             showToast(`User unbanned`, 'success');
             fetchUsers();
+        }
+    };
+
+    const handleToggleBlacklist = async (userId) => {
+        const user = users.find(u => u.id === userId);
+        const next = !user?.is_blacklisted;
+        const { error } = await supabase
+            .from('profiles')
+            .update({ is_blacklisted: next })
+            .eq('id', userId);
+        if (!error) {
+            showToast(next ? 'User blacklisted (leaderboard restricted)' : 'User removed from blacklist');
+            fetchUsers();
+        } else {
+            showToast(error.message, 'error');
         }
     };
 
@@ -1157,6 +1172,14 @@ const AdminPanel = ({ onBack }) => {
                                                             Ban Player
                                                         </button>
                                                     )}
+                                                    <button
+                                                        className={`admin-btn ${user.is_blacklisted ? 'blacklist-remove-btn' : 'blacklist-btn'}`}
+                                                        onClick={() => handleToggleBlacklist(user.id)}
+                                                        title={user.is_blacklisted ? 'Remove from blacklist' : 'Blacklist: hidden from all leaderboards; they only see self + zunnoon'}
+                                                    >
+                                                        <Prohibit size={16} weight="bold" />
+                                                        {user.is_blacklisted ? 'Remove blacklist' : 'Blacklist'}
+                                                    </button>
                                                     <button
                                                         className="admin-btn admin-btn-warning reset-stats-btn"
                                                         onClick={() => {

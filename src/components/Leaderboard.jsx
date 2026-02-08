@@ -5,57 +5,101 @@ import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
 import candyIcon from '../assets/Candy Icon.webp';
 
+const ZUNNOON_USERNAME = 'zunnoon';
+
 const Leaderboard = ({ onBack }) => {
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const [players, setPlayers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [category, setCategory] = useState('overall'); // 'overall' | 'pinata' | 'flappy'
+    const [category, setCategory] = useState('overall'); // 'overall' | 'pinata' | 'flappy' | 'cake'
 
     useEffect(() => {
         fetchLeaderboard();
-    }, [category]);
+    }, [category, profile?.is_blacklisted]);
 
     const fetchLeaderboard = async () => {
         setLoading(true);
-
         let data, error;
 
-        if (category === 'overall') {
-            const response = await supabase
+        if (profile?.is_blacklisted && user?.id) {
+            // Blacklisted: only show self + zunnoon
+            const { data: zunnoonRow } = await supabase
                 .from('profiles')
-                .select('id, username, candies')
-                .order('candies', { ascending: false })
-                .limit(50);
-            data = response.data;
-            error = response.error;
-        } else {
-            // Fetch per-game high scores
-            const response = await supabase
-                .from('game_stats')
-                .select(`
-                    high_score,
-                    profiles:user_id (id, username, candies)
-                `)
-                .eq('game_id', category)
-                .order('high_score', { ascending: false })
-                .limit(50);
+                .select('id')
+                .ilike('username', ZUNNOON_USERNAME)
+                .limit(1)
+                .maybeSingle();
+            const zunnoonId = zunnoonRow?.id;
+            const ids = zunnoonId ? [user.id, zunnoonId] : [user.id];
 
-            error = response.error;
-            if (data = response.data) {
-                // Flatten structure for easier display
-                data = data.map(item => ({
-                    id: item.profiles.id,
-                    username: item.profiles.username,
-                    score: item.high_score,
-                    candies: item.profiles.candies // Keep for context
-                }));
+            if (category === 'overall') {
+                const response = await supabase
+                    .from('profiles')
+                    .select('id, username, candies')
+                    .in('id', ids)
+                    .order('candies', { ascending: false });
+                data = response.data;
+                error = response.error;
+            } else {
+                const response = await supabase
+                    .from('game_stats')
+                    .select(`
+                        high_score,
+                        profiles:user_id (id, username, candies)
+                    `)
+                    .eq('game_id', category)
+                    .in('user_id', ids)
+                    .order('high_score', { ascending: false });
+                error = response.error;
+                if (data = response.data) {
+                    data = data.map(item => ({
+                        id: item.profiles?.id,
+                        username: item.profiles?.username,
+                        score: item.high_score,
+                        candies: item.profiles?.candies
+                    })).filter(Boolean);
+                }
+            }
+        } else {
+            // Normal fetch: exclude blacklisted users so no one sees them on leaderboard
+            if (category === 'overall') {
+                const response = await supabase
+                    .from('profiles')
+                    .select('id, username, candies')
+                    .eq('is_blacklisted', false)
+                    .order('candies', { ascending: false })
+                    .limit(50);
+                data = response.data;
+                error = response.error;
+            } else {
+                const response = await supabase
+                    .from('game_stats')
+                    .select(`
+                        high_score,
+                        profiles:user_id (id, username, candies, is_blacklisted)
+                    `)
+                    .eq('game_id', category)
+                    .order('high_score', { ascending: false })
+                    .limit(80);
+                error = response.error;
+                if (data = response.data) {
+                    data = data
+                        .filter(item => !item.profiles?.is_blacklisted)
+                        .slice(0, 50)
+                        .map(item => ({
+                            id: item.profiles?.id,
+                            username: item.profiles?.username,
+                            score: item.high_score,
+                            candies: item.profiles?.candies
+                        }));
+                }
             }
         }
 
         if (error) {
             console.error('Error fetching leaderboard:', error);
         } else {
-            const list = (data || []).filter(p => (p.username || '').toLowerCase() !== 'admin');
+            const list = (data || []).filter(p => p && (p.username || '').toLowerCase() !== 'admin');
             setPlayers(list.map(p => ({
                 ...p,
                 score: category === 'overall' ? p.candies : p.score

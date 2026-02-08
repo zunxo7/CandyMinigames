@@ -257,6 +257,29 @@
     box-shadow: 0 2px 8px rgba(217, 119, 6, 0.15);
 }
 
+.blacklist-btn,
+.blacklist-remove-btn {
+    white-space: nowrap;
+}
+.blacklist-btn {
+    background: #e5e7eb;
+    color: #374151;
+    border-color: #2d2d2d;
+}
+.blacklist-btn:hover {
+    background: #d1d5db;
+    transform: translateY(-2px);
+}
+.blacklist-remove-btn {
+    background: #d1fae5;
+    color: #065f46;
+    border-color: #2d2d2d;
+}
+.blacklist-remove-btn:hover {
+    background: #a7f3d0;
+    transform: translateY(-2px);
+}
+
 .admin-card-header {
     display: flex;
     justify-content: space-between;
