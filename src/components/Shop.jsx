@@ -107,9 +107,6 @@ const Shop = ({ onBack }) => {
             // Refresh data
             await fetchData();
             await fetchProfile(user.id);
-
-            // Show content
-            setViewingItem(item);
         } catch (error) {
             console.error('Purchase failed:', error);
             setErrorModal({
