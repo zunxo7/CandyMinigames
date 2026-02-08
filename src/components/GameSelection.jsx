@@ -47,7 +47,7 @@ const GameSelection = ({ onSelectGame, onBack }) => {
                 <button className="back-btn" onClick={onBack}>
                     <ArrowLeft size={24} weight="bold" />
                 </button>
-                <h1 className="page-title">Choose Your Game</h1>
+                <h1 className="page-title">Single Player</h1>
                 <div className="header-spacer"></div>
             </div>
 

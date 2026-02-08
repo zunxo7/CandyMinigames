@@ -68,6 +68,38 @@ app.post('/api/admin/update-auth-email', async (req, res) => {
   }
 });
 
+app.post('/api/admin/delete-auth-user', async (req, res) => {
+  if (!supabaseAnon || !supabaseAdmin) {
+    return res.status(503).json({ error: 'Server auth not configured' });
+  }
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (!token) {
+    return res.status(401).json({ error: 'Missing authorization' });
+  }
+  const { userId } = req.body || {};
+  if (!userId) {
+    return res.status(400).json({ error: 'userId required' });
+  }
+  try {
+    const { data: { user: caller }, error: userError } = await supabaseAnon.auth.getUser(token);
+    if (userError || !caller) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    const { data: profile } = await supabaseAdmin.from('profiles').select('username').eq('id', caller.id).single();
+    if ((profile?.username || '').toLowerCase() !== 'admin') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (deleteError) {
+      return res.status(400).json({ error: deleteError.message });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Server error' });
+  }
+});
+
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {

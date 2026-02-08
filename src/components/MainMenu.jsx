@@ -10,8 +10,7 @@ import {
     GearSix,
     SlidersHorizontal,
     Cake,
-    Cookie,
-    Users
+    Cookie
 } from '@phosphor-icons/react';
 import candyIcon from '../assets/Candy Icon.webp';
 
@@ -24,10 +23,10 @@ const FLOAT_CAKES = [
     { Icon: Cookie, size: 30, top: '18%', right: '8%', delay: 0.8, duration: 6 },
 ];
 
-const MainMenu = ({ onPlay, onMultiplayer, onShop, onLeaderboard, onSettings, onPanel }) => {
+const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
     const { profile, signOut } = useAuth();
     const isAdmin = profile?.username?.toLowerCase() === 'admin';
-    const showShop = profile?.username?.toLowerCase() === 'fatima';
+    const showShop = isAdmin || profile?.username?.toLowerCase() === 'fatima';
 
     return (
         <div className="main-menu">
@@ -89,9 +88,6 @@ const MainMenu = ({ onPlay, onMultiplayer, onShop, onLeaderboard, onSettings, on
                         <img src={candyIcon} alt="Candy" className="candy-icon" />
                         <span>{profile?.candies || 0}</span>
                     </div>
-                    <button className="user-bar-icon-btn" onClick={onSettings} title="Settings">
-                        <GearSix size={22} weight="fill" />
-                    </button>
                     <button className="logout-btn" onClick={signOut} title="Logout">
                         <SignOut size={20} weight="bold" />
                     </button>
@@ -122,8 +118,8 @@ const MainMenu = ({ onPlay, onMultiplayer, onShop, onLeaderboard, onSettings, on
                     {[
                         { onClick: onPlay, className: 'primary', Icon: GameController, label: 'Play' },
                         ...(showShop ? [{ onClick: onShop, className: 'secondary menu-btn-featured', Icon: Storefront, label: 'Shop' }] : []),
-                        { onClick: onMultiplayer, className: 'secondary menu-btn-featured', Icon: Users, label: 'Multiplayer' },
                         { onClick: onLeaderboard, className: 'secondary menu-btn-featured', Icon: Trophy, label: 'Leaderboard' },
+                        { onClick: onSettings, className: 'secondary menu-btn-featured', Icon: GearSix, label: 'Settings' },
                         ...(isAdmin ? [{ onClick: onPanel, className: 'admin', Icon: SlidersHorizontal, label: 'Panel' }] : []),
                     ].map(({ onClick, className, Icon, label }, i) => (
                         <motion.button

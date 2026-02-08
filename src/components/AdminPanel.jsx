@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning, GameController } from '@phosphor-icons/react';
+import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning, GameController, ArrowCounterClockwise } from '@phosphor-icons/react';
 import { supabase } from '../supabase';
 import ContentEditor from './ContentEditor';
 import AnnouncementManager from './AnnouncementManager';
@@ -35,6 +35,8 @@ const AdminPanel = ({ onBack }) => {
     const [showResetConfirm, setShowResetConfirm] = useState(false);
     const [confirmDeleteUserId, setConfirmDeleteUserId] = useState(null);
     const [confirmDeleteUsername, setConfirmDeleteUsername] = useState('');
+    const [confirmResetUserId, setConfirmResetUserId] = useState(null);
+    const [confirmResetUsername, setConfirmResetUsername] = useState('');
     const [toastMessage, setToastMessage] = useState(null); // { message, type: 'success' | 'error' }
     const [dragItemId, setDragItemId] = useState(null);
     const [dragOverItemId, setDragOverItemId] = useState(null);
@@ -397,6 +399,21 @@ const AdminPanel = ({ onBack }) => {
 
         setLoading(true);
         try {
+            const apiBase = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+                const r = await fetch(`${apiBase}/api/admin/delete-auth-user`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                    body: JSON.stringify({ userId })
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    showToast(data?.error || 'Auth delete failed', 'error');
+                    return;
+                }
+            }
+
             await supabase.from('purchases').delete().eq('user_id', userId);
             await supabase.from('game_stats').delete().eq('user_id', userId);
             const { error } = await supabase.from('profiles').delete().eq('id', userId);
@@ -407,6 +424,26 @@ const AdminPanel = ({ onBack }) => {
             fetchUsers();
         } catch (err) {
             showToast(err?.message || 'Failed to delete', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResetUserStats = async () => {
+        const userId = confirmResetUserId;
+        if (!userId) return;
+
+        setLoading(true);
+        try {
+            await supabase.from('profiles').update({ candies: 0 }).eq('id', userId);
+            await supabase.from('game_stats').delete().eq('user_id', userId);
+            await supabase.from('purchases').delete().eq('user_id', userId);
+            showToast(`${confirmResetUsername} has been reset`);
+            setConfirmResetUserId(null);
+            setConfirmResetUsername('');
+            fetchUsers();
+        } catch (err) {
+            showToast(err?.message || 'Reset failed', 'error');
         } finally {
             setLoading(false);
         }
@@ -544,6 +581,29 @@ const AdminPanel = ({ onBack }) => {
                             </button>
                             <button className="modal-btn delete" onClick={handleDeleteAccount}>
                                 Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Reset user stats confirmation */}
+            {confirmResetUserId && (
+                <div className="modal-backdrop" onClick={() => { setConfirmResetUserId(null); setConfirmResetUsername(''); }}>
+                    <div className="admin-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-icon reset">
+                            <ArrowCounterClockwise size={32} weight="bold" />
+                        </div>
+                        <h2 className="modal-title">Reset stats?</h2>
+                        <p className="modal-subtitle">
+                            Reset <strong>{confirmResetUsername}</strong>: candies → 0, leaderboard/scores cleared, purchases removed. Account stays; they can play again from scratch.
+                        </p>
+                        <div className="modal-actions">
+                            <button className="modal-btn" onClick={() => { setConfirmResetUserId(null); setConfirmResetUsername(''); }}>
+                                Cancel
+                            </button>
+                            <button className="modal-btn reset" onClick={handleResetUserStats}>
+                                Reset
                             </button>
                         </div>
                     </div>
@@ -1108,6 +1168,17 @@ const AdminPanel = ({ onBack }) => {
                                                             Ban Player
                                                         </button>
                                                     )}
+                                                    <button
+                                                        className="admin-btn admin-btn-warning reset-stats-btn"
+                                                        onClick={() => {
+                                                            setConfirmResetUserId(user.id);
+                                                            setConfirmResetUsername(user.username || 'this user');
+                                                        }}
+                                                        title="Reset candies, scores, purchases"
+                                                    >
+                                                        <ArrowCounterClockwise size={16} weight="bold" />
+                                                        Reset
+                                                    </button>
                                                     <button
                                                         className="admin-btn admin-btn-danger delete-account-btn"
                                                         onClick={() => {

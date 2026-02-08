@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { supabase } from './supabase';
 import LoginModal from './components/LoginModal';
 import MainMenu from './components/MainMenu';
+import PlayModeChoice from './components/PlayModeChoice';
 import GameSelection from './components/GameSelection';
 import GameCanvas from './components/GameCanvas';
 import Shop from './components/Shop';
@@ -20,7 +21,7 @@ import { GameConfigProvider } from './context/GameConfigContext';
 
 const AppContent = () => {
   const { user, profile, loading, signOut, fetchProfile } = useAuth();
-  const [screen, setScreen] = useState('menu'); // 'menu' | 'games' | 'play' | 'shop' | 'leaderboard' | 'settings' | 'panel' | 'multiplayer'
+  const [screen, setScreen] = useState('menu'); // 'menu' | 'play-mode' | 'games' | 'multiplayer' | 'play' | 'shop' | 'leaderboard' | 'settings' | 'panel'
   const [playRoomId, setPlayRoomId] = useState(null);
   const [playIsHost, setPlayIsHost] = useState(false);
   const [gameType, setGameType] = useState('pinata');
@@ -135,17 +136,23 @@ const AppContent = () => {
 
       {screen === 'menu' && (
         <MainMenu
-          onPlay={() => setScreen('games')}
-          onMultiplayer={() => setScreen('multiplayer')}
+          onPlay={() => setScreen('play-mode')}
           onShop={() => setScreen('shop')}
           onLeaderboard={() => setScreen('leaderboard')}
           onSettings={() => setScreen('settings')}
           onPanel={() => setScreen('panel')}
         />
       )}
+      {screen === 'play-mode' && (
+        <PlayModeChoice
+          onSinglePlayer={() => setScreen('games')}
+          onMultiplayer={() => setScreen('multiplayer')}
+          onBack={() => setScreen('menu')}
+        />
+      )}
       {screen === 'multiplayer' && (
         <Multiplayer
-          onBack={() => setScreen('menu')}
+          onBack={() => setScreen('play-mode')}
           onStartGame={(roomId, isHost, gameType) => {
             setPlayRoomId(roomId);
             setPlayIsHost(isHost);
@@ -160,7 +167,7 @@ const AppContent = () => {
             setGameType(gameId);
             setScreen('play');
           }}
-          onBack={() => setScreen('menu')}
+          onBack={() => setScreen('play-mode')}
         />
       )}
       {screen === 'play' && (

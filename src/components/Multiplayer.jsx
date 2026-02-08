@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Confetti, Copy, GameController, Lock, Sparkle, Star, Cake, Users, X } from '@phosphor-icons/react';
+import { ArrowLeft, Confetti, Copy, GameController, Sparkle, Star, Cake, Users, X } from '@phosphor-icons/react';
 import candyIcon from '../assets/Candy Icon.webp';
 import CrumbIcon from '../assets/CrumbIcon.webp';
 import FrostiIcon from '../assets/FrostiIcon.webp';
@@ -16,6 +16,7 @@ const games = [
         description: 'Help Crumb smash enemies, dodge attacks, and collect candy in this sweet survival challenge!',
         icon: Confetti,
         available: true,
+        multiplayerSupported: true,
         color: '#ff6b9d',
         characterIcon: CrumbIcon
     },
@@ -26,6 +27,7 @@ const games = [
         description: 'Guide Frosti through peppermint obstacles! Tap to flap and dodge the pipes.',
         icon: Star,
         available: true,
+        multiplayerSupported: false,
         color: '#74b9ff',
         characterIcon: FrostiIcon
     },
@@ -36,6 +38,7 @@ const games = [
         description: 'Help Bobo fill his basket with sweets! Catch cakes and candy; avoid the veggies!',
         icon: Cake,
         available: true,
+        multiplayerSupported: false,
         color: '#8B4513',
         characterIcon: BoboIcon
     }
@@ -172,16 +175,18 @@ const Multiplayer = ({ onBack, onStartGame }) => {
             <div className="games-grid">
                 {games.map((game) => {
                     const IconComponent = game.icon;
+                    const canPlayMultiplayer = game.multiplayerSupported;
                     return (
                         <div
                             key={game.id}
-                            className={`game-card ${!game.available ? 'disabled' : ''}`}
-                            onClick={() => game.available && setSelectedGame(game)}
+                            className={`game-card ${!canPlayMultiplayer ? 'disabled' : ''}`}
+                            onClick={() => canPlayMultiplayer && setSelectedGame(game)}
                             style={{ '--card-accent': game.color }}
                         >
-                            {!game.available && (
-                                <div className="game-card-lock">
-                                    <Lock size={24} weight="bold" />
+                            {!canPlayMultiplayer && (
+                                <div className="game-card-lock-overlay">
+                                    <i className="fa-solid fa-lock lock-icon" aria-hidden />
+                                    <span>Coming Soon</span>
                                 </div>
                             )}
                             <div className="game-card-icon-wrap">
@@ -197,9 +202,9 @@ const Multiplayer = ({ onBack, onStartGame }) => {
                                 </div>
                             )}
                             <p className="game-card-desc">{game.description}</p>
-                            {game.available && <button className="game-card-btn">Play</button>}
-                            {game.available && <img src={candyIcon} alt="" className="game-card-candy-deco" aria-hidden />}
-                            {game.available && (
+                            {canPlayMultiplayer && <button className="game-card-btn">Play</button>}
+                            {canPlayMultiplayer && <img src={candyIcon} alt="" className="game-card-candy-deco" aria-hidden />}
+                            {canPlayMultiplayer && (
                                 <>
                                     <Sparkle className="card-sparkle sparkle-1" size={20} weight="fill" />
                                     <Sparkle className="card-sparkle sparkle-2" size={16} weight="fill" />

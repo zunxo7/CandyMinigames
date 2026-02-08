@@ -243,6 +243,20 @@
     box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
 }
 
+.admin-btn.admin-btn-warning,
+.reset-stats-btn {
+    background: #fef3c7;
+    color: #d97706;
+    border-color: #2d2d2d;
+}
+
+.admin-btn.admin-btn-warning:hover,
+.reset-stats-btn:hover {
+    background: #fde68a;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.15);
+}
+
 .admin-card-header {
     display: flex;
     justify-content: space-between;
@@ -577,6 +591,11 @@
     color: #ef4444;
 }
 
+.modal-icon.reset {
+    background: #fef3c7;
+    color: #d97706;
+}
+
 .modal-icon.warning {
     color: #f39c12;
     background: #fef9e7;
@@ -639,6 +658,16 @@
 .modal-btn.delete {
     background: #e74c3c;
     color: white;
+}
+
+.modal-btn.reset {
+    background: #fef3c7;
+    color: #d97706;
+    border-color: #2d2d2d;
+}
+
+.modal-btn.reset:hover {
+    background: #fde68a;
 }
 
 
