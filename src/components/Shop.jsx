@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Storefront, ShoppingCart, Eye, CaretLeft, CaretRight } from '@phosphor-icons/react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
@@ -138,8 +139,14 @@ const Shop = ({ onBack }) => {
         );
     }
 
+    const t = { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] };
     return (
-        <div className="shop-page">
+        <motion.div
+            className="shop-page"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={t}
+        >
             {/* Error Modal */}
             {errorModal && (
                 <div className="modal-backdrop" onClick={() => setErrorModal(null)}>
@@ -157,7 +164,12 @@ const Shop = ({ onBack }) => {
             )}
 
             {/* Header */}
-            <div className="shop-header">
+            <motion.div
+                className="shop-header"
+                initial={{ opacity: 0, y: -16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...t, delay: 0.08 }}
+            >
                 <button className="back-btn" onClick={onBack}>
                     <ArrowLeft size={24} weight="bold" />
                 </button>
@@ -166,10 +178,15 @@ const Shop = ({ onBack }) => {
                     <img src={candyIcon} alt="Candy" className="candy-icon" />
                     <span>{profile?.candies || 0}</span>
                 </div>
-            </div>
+            </motion.div>
 
             {/* Content */}
-            <div className="shop-content">
+            <motion.div
+                className="shop-content"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...t, delay: 0.18 }}
+            >
                 {loading ? (
                     <div className="loading-state">
                         <div className="loading-spinner"></div>
@@ -245,8 +262,8 @@ const Shop = ({ onBack }) => {
                         )}
                     </>
                 )}
-            </div>
-        </div>
+            </motion.div>
+        </motion.div>
     );
 };
 

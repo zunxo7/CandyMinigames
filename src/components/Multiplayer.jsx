@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Confetti, Copy, GameController, Sparkle, Star, Cake, Users, X } from '@phosphor-icons/react';
 import candyIcon from '../assets/Candy Icon.webp';
 import CrumbIcon from '../assets/CrumbIcon.webp';
@@ -160,19 +161,35 @@ const Multiplayer = ({ onBack, onStartGame }) => {
     };
 
     const inLobby = mode === 'create' || mode === 'join';
+    const t = { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] };
 
     // Game selection grid (same layout as GameSelection)
     return (
-        <div className="game-selection">
-            <div className="game-selection-header">
+        <motion.div
+            className="game-selection"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={t}
+        >
+            <motion.div
+                className="game-selection-header"
+                initial={{ opacity: 0, y: -16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...t, delay: 0.08 }}
+            >
                 <button className="back-btn" onClick={onBack}>
                     <ArrowLeft size={24} weight="bold" />
                 </button>
                 <h1 className="page-title">Multiplayer</h1>
                 <div className="header-spacer" />
-            </div>
+            </motion.div>
 
-            <div className="games-grid">
+            <motion.div
+                className="games-grid"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...t, delay: 0.15 }}
+            >
                 {games.map((game) => {
                     const IconComponent = game.icon;
                     const canPlayMultiplayer = game.multiplayerSupported;
@@ -214,7 +231,7 @@ const Multiplayer = ({ onBack, onStartGame }) => {
                         </div>
                     );
                 })}
-            </div>
+            </motion.div>
 
             {/* Modal: Create/Join or Lobby (same modal) */}
             {selectedGame && (
@@ -297,7 +314,7 @@ const Multiplayer = ({ onBack, onStartGame }) => {
                     </div>
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 };
 

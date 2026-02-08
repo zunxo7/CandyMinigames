@@ -1,5 +1,8 @@
+import { motion } from 'framer-motion';
 import { ArrowLeft } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
+
+const t = { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] };
 
 const Settings = ({ onBack }) => {
     const { profile, updateProfileSetting } = useAuth();
@@ -15,15 +18,30 @@ const Settings = ({ onBack }) => {
     };
 
     return (
-        <div className="settings-page">
-            <div className="settings-header">
+        <motion.div
+            className="settings-page"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={t}
+        >
+            <motion.div
+                className="settings-header"
+                initial={{ opacity: 0, y: -16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...t, delay: 0.08 }}
+            >
                 <button className="back-btn" onClick={onBack} aria-label="Back">
                     <ArrowLeft size={24} weight="bold" />
                 </button>
                 <h1 className="page-title">Settings</h1>
                 <div className="header-spacer" />
-            </div>
-            <div className="settings-content">
+            </motion.div>
+            <motion.div
+                className="settings-content"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...t, delay: 0.18 }}
+            >
                 <div className="settings-card">
                     <label className="settings-row">
                         <span className="settings-label">Show tutorials before each game</span>
@@ -54,8 +72,8 @@ const Settings = ({ onBack }) => {
                     </label>
                     <p className="settings-hint">When on, the game pauses when you switch to another window. Turn off to keep it running in the background.</p>
                 </div>
-            </div>
-        </div>
+            </motion.div>
+        </motion.div>
     );
 };
 

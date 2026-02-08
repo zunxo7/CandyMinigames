@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning, GameController, ArrowCounterClockwise } from '@phosphor-icons/react';
 import { supabase } from '../supabase';
 import ContentEditor from './ContentEditor';
@@ -506,8 +507,14 @@ const AdminPanel = ({ onBack }) => {
         );
     }
 
+    const t = { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] };
     return (
-        <div className="admin-panel">
+        <motion.div
+            className="admin-panel"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={t}
+        >
             {/* Toast Notification */}
             {toastMessage && (
                 <div className={`admin-toast ${toastMessage.type}`}>
@@ -1199,7 +1206,7 @@ const AdminPanel = ({ onBack }) => {
                     </div>
                 )}
             </div>
-        </div>
+        </motion.div>
     );
 };
 

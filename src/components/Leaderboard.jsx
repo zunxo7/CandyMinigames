@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Trophy, Crown, Medal, User, GameController, Bird, ChartBar, SmileySad, Confetti, Sparkle, Cake } from '@phosphor-icons/react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
@@ -81,8 +82,14 @@ const Leaderboard = ({ onBack }) => {
         return <span className="rank-number-text">{index + 1}</span>;
     };
 
+    const t = { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] };
     return (
-        <div className="leaderboard-container">
+        <motion.div
+            className="leaderboard-container"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={t}
+        >
             {/* Floating decorations */}
             <div className="floating-decoration dec-1">
                 <Confetti size={32} weight="fill" />
@@ -95,7 +102,12 @@ const Leaderboard = ({ onBack }) => {
             </div>
 
             {/* Sidebar Navigation */}
-            <div className="leaderboard-sidebar">
+            <motion.div
+                className="leaderboard-sidebar"
+                initial={{ opacity: 0, x: -24 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ ...t, delay: 0.08 }}
+            >
                 <button
                     onClick={onBack}
                     className="back-btn sidebar-back-btn"
@@ -123,10 +135,15 @@ const Leaderboard = ({ onBack }) => {
                         );
                     })}
                 </div>
-            </div>
+            </motion.div>
 
             {/* Main Content Area */}
-            <div className="leaderboard-main">
+            <motion.div
+                className="leaderboard-main"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ ...t, delay: 0.15 }}
+            >
                 <div className="leaderboard-title-card">
                     <h1 className="leaderboard-title">
                         Top Players
@@ -173,8 +190,8 @@ const Leaderboard = ({ onBack }) => {
                         )}
                     </div>
                 )}
-            </div>
-        </div>
+            </motion.div>
+        </motion.div>
     );
 };
 
