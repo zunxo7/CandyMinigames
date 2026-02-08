@@ -50,7 +50,6 @@ const AdminPanel = ({ onBack }) => {
     const [updatingMode, setUpdatingMode] = useState(false);
     const [updatingModeLoading, setUpdatingModeLoading] = useState(false);
     const { config: gameConfig, saveConfig, refreshConfig } = useGameConfig();
-    const candyGiftChannelRef = useRef(null);
     const [gamesConfigDirty, setGamesConfigDirty] = useState({ flappy: {}, pinata: {}, cake: {} });
     const [gamesSaveStatus, setGamesSaveStatus] = useState(null); // 'saving' | 'saved' | 'error'
 
@@ -65,17 +64,6 @@ const AdminPanel = ({ onBack }) => {
         if (activeTab === 'games') refreshConfig();
     }, [activeTab, refreshConfig]);
 
-    // Stay subscribed to candy_gift when on Users tab so we can broadcast when adding candies
-    useEffect(() => {
-        if (activeTab !== 'users') return;
-        const ch = supabase.channel('candy_gift').subscribe((status) => {
-            if (status === 'SUBSCRIBED') candyGiftChannelRef.current = ch;
-        });
-        return () => {
-            supabase.removeChannel(ch);
-            candyGiftChannelRef.current = null;
-        };
-    }, [activeTab]);
 
     useEffect(() => {
         const fetchUpdating = async () => {
@@ -300,18 +288,13 @@ const AdminPanel = ({ onBack }) => {
             }
         }
 
-        // Notify the user with a full-screen overlay (Realtime broadcast on shared channel)
-        const ch = candyGiftChannelRef.current;
-        if (ch) {
-            ch.send({ type: 'broadcast', event: 'candies_added', payload: { targetUserId: userId, amount } });
-        } else {
-            const newCh = supabase.channel('candy_gift');
-            newCh.subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    newCh.send({ type: 'broadcast', event: 'candies_added', payload: { targetUserId: userId, amount } });
-                    setTimeout(() => supabase.removeChannel(newCh), 500);
-                }
-            });
+        // Notify the user with a full-screen overlay (Realtime broadcast via REST so it always delivers)
+        try {
+            const ch = supabase.channel('candy_gift');
+            await ch.httpSend('candies_added', { targetUserId: userId, amount });
+            supabase.removeChannel(ch);
+        } catch (_) {
+            // Broadcast is best-effort; candies were already updated
         }
 
         setCandyUpdate({ userId: null, amount: '' });
@@ -436,9 +419,8 @@ const AdminPanel = ({ onBack }) => {
 
         setLoading(true);
         try {
-            await supabase.from('profiles').update({ candies: 0 }).eq('id', userId);
-            await supabase.from('game_stats').delete().eq('user_id', userId);
-            await supabase.from('purchases').delete().eq('user_id', userId);
+            const { error } = await supabase.rpc('admin_reset_user_data', { target_user_id: userId });
+            if (error) throw error;
             showToast(`${confirmResetUsername} has been reset`);
             setConfirmResetUserId(null);
             setConfirmResetUsername('');

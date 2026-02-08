@@ -37,7 +37,9 @@ const AppContent = () => {
         const data = msg?.payload ?? msg;
         const target = data?.targetUserId ?? data?.userId;
         const amount = data?.amount;
-        if (target === user.id && amount != null) setCandyGift({ amount: Number(amount) });
+        if (String(target) === String(user.id) && amount != null && !Number.isNaN(Number(amount))) {
+          setCandyGift({ amount: Number(amount) });
+        }
       })
       .subscribe();
     return () => supabase.removeChannel(channel);

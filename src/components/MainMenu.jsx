@@ -99,7 +99,7 @@ const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
                     className="main-title"
                     initial={{ opacity: 0, y: 28 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.95, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    transition={{ duration: 0.95, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
                 >
                     <span className="title-line">Candy</span>
                     <span className="title-line accent">Minigames</span>
@@ -109,7 +109,7 @@ const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
                     className="main-subtitle"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.85, delay: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    transition={{ duration: 0.85, delay: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
                 >
                     Choose your adventure!
                 </motion.p>
@@ -121,7 +121,7 @@ const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
                         { onClick: onLeaderboard, className: 'secondary menu-btn-featured', Icon: Trophy, label: 'Leaderboard' },
                         { onClick: onSettings, className: 'secondary menu-btn-featured', Icon: GearSix, label: 'Settings' },
                         ...(isAdmin ? [{ onClick: onPanel, className: 'admin', Icon: SlidersHorizontal, label: 'Panel' }] : []),
-                    ].map(({ onClick, className, Icon, label }, i) => (
+                    ].map(({ onClick, className, Icon, label }) => (
                         <motion.button
                             key={label}
                             className={`menu-btn ${className}`}
@@ -130,7 +130,7 @@ const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{
                                 duration: 0.75,
-                                delay: 0.3 + i * 0.12,
+                                delay: { Play: 0.4, Shop: 0.5, Leaderboard: 0.6, Settings: 0.7, Panel: 0.8 }[label] ?? 0.5,
                                 ease: [0.25, 0.46, 0.45, 0.94],
                             }}
                             whileHover={{ scale: 1.06, transition: { duration: 0.25 } }}
