@@ -62,6 +62,26 @@ export class Player {
             health: 0,
             punchSpeed: 0
         };
+
+        // Multiplayer: when set, use this instead of game.input
+        this.remoteInput = null; // { left, right, jump, punch }
+    }
+
+    getInputAdapter() {
+        if (this.remoteInput) {
+            const ri = this.remoteInput;
+            return {
+                isDown: (key) => {
+                    const k = (key || '').toLowerCase();
+                    if (k === 'a' || k === 'arrowleft') return !!ri.left;
+                    if (k === 'd' || k === 'arrowright') return !!ri.right;
+                    if (k === 'w' || k === 'arrowup') return !!ri.jump;
+                    if (k === ' ') return !!ri.punch;
+                    return false;
+                }
+            };
+        }
+        return this.game.input;
     }
 
     // Update base stats from game's run tracking
@@ -155,7 +175,7 @@ export class Player {
             this.isGrounded = false;
         }
 
-        const input = this.game.input;
+        const input = this.getInputAdapter();
         let moving = false;
 
         // Handle Jumping (up arrow or W; space is used for attack)
@@ -181,12 +201,12 @@ export class Player {
         }
 
         // Movement using dynamic speed
-        if (input.isDown('a') || input.isDown('arrowleft')) {
+        if (input.isDown('a') || input.isDown('ArrowLeft')) {
             this.x -= this.speed * dt;
             this.facingRight = false;
             moving = true;
         }
-        if (input.isDown('d') || input.isDown('arrowright')) {
+        if (input.isDown('d') || input.isDown('ArrowRight')) {
             this.x += this.speed * dt;
             this.facingRight = true;
             moving = true;
@@ -247,11 +267,12 @@ export class Player {
         this.sprite.cancelAnimation();
         this.sprite.setAnimation('hurt', false, null, true);
 
-        this.game.addNotification(`-${amount} 💔`, 'damage');
+        const forPlayer = this.game.player2 === this ? 1 : 0;
+        this.game.addNotification(`-${amount} 💔`, 'damage', forPlayer);
 
         if (this.hp <= 0) {
             this.hp = 0;
-            this.game.triggerGameOver();
+            if (!this.game.multiplayer) this.game.triggerGameOver();
         }
     }
 

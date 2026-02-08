@@ -7,7 +7,7 @@ import { Upgrade } from './Upgrade';
 import { CANVAS_WIDTH } from './Constants';
 
 export class PinataGame extends Game {
-    constructor(canvas, onGameOver, onCurrencyUpdate) {
+    constructor(canvas, onGameOver, onCurrencyUpdate, config = {}) {
         super(canvas, onGameOver);
         this.onCurrencyUpdate = onCurrencyUpdate;
         this.player = null;
@@ -19,13 +19,19 @@ export class PinataGame extends Game {
         this.enemySpawnTimer = 0;
         this.medkitSpawnTimer = 0;
         this.upgradeSpawnTimer = 0;
-        this.spawnInterval = 5;
+        this.spawnInterval = config.spawnInterval ?? 5;
+        this.medkitSpawnInterval = config.medkitSpawnInterval ?? 15;
+        this.upgradeSpawnInterval = config.upgradeSpawnInterval ?? 15;
+        this.maxEnemies = config.maxEnemies ?? 10;
+        this.easeSeconds = config.easeSeconds ?? 20;
+        this.hardThreshold = config.hardThreshold ?? 75;
+        this.earlySpawnInterval = config.earlySpawnInterval ?? 7;
+        this.comboWindow = config.comboWindow ?? 3;
         this.killCandies = 0;
-        this.spentCandies = 0; // Track candies spent on upgrades
-        this.currency = 0; // The currency used for in-game upgrades
+        this.spentCandies = 0;
+        this.currency = 0;
         this.nextNotificationId = 1;
 
-        // Run-specific stats (resettable)
         this.runStats = {
             damage: 0,
             speed: 0,
@@ -33,17 +39,54 @@ export class PinataGame extends Game {
             health: 0,
             punchSpeed: 0
         };
+        this.runStatsPeer = {
+            damage: 0,
+            speed: 0,
+            knockback: 0,
+            health: 0,
+            punchSpeed: 0
+        };
 
-        // Screen shake (punch only)
         this.shakeTimer = 0;
         this.shakeIntensity = 0;
         this.shakeDuration = 0.12;
 
-        // Combo: quick successive kills = candy multiplier + "2x" display
         this.comboCount = 0;
         this.lastKillTime = -999;
-        this.comboWindow = 3; // seconds between kills to maintain combo
-        this.comboDisplayTimer = 0; // show "2x" etc. for this long
+        this.comboDisplayTimer = 0;
+
+        this.multiplayer = config.multiplayer || null;
+        this.player2 = null;
+        this.peerInput = { left: false, right: false, jump: false, punch: false };
+        this.lastPeerPunch = false;
+        this.recentExplosions = [];
+        this.recentHealEffects = [];
+        this.recentUpgradeEffects = [];
+        this.playerNames = ['Player 1', 'Player 2'];
+        this.killsHost = 0;
+        this.killsPeer = 0;
+    }
+
+    applyPeerMedkitClaim(claimX) {
+        if (!this.player2 || claimX == null) return;
+        const m = this.medkits.find((med) => Math.abs(med.x - claimX) < 40);
+        if (!m || m.markedForDeletion) return;
+        const healAmount = m.healAmount;
+        const oldHp = this.player2.hp;
+        this.player2.hp = Math.min(this.player2.maxHp, this.player2.hp + healAmount);
+        const actualHeal = this.player2.hp - oldHp;
+        if (actualHeal > 0) this.addNotification(`+${actualHeal} ❤️`, 'heal', 1);
+        this.spawnHealEffect(this.player2.x, this.player2.y - 50);
+        m.markedForDeletion = true;
+    }
+
+    applyPeerUpgradeClaim(claimX) {
+        if (!this.player2 || claimX == null) return;
+        const u = this.upgrades.find((up) => Math.abs(up.x - claimX) < 40);
+        if (!u || u.markedForDeletion) return;
+        this.player2.applyUpgrade(u.type, u.amount, u.duration);
+        this.spawnUpgradeEffect(this.player2.x, this.player2.y - 50, u.type);
+        u.markedForDeletion = true;
     }
 
     triggerShake(intensity = 8, duration = 0.12) {
@@ -57,15 +100,24 @@ export class PinataGame extends Game {
         this.player.setRunStats(this.runStats);
         this.entities.push(this.player);
 
+        if (this.multiplayer) {
+            this.player2 = new Player(this);
+            this.player2.setRunStats(this.runStatsPeer);
+            this.player2.x = 350;
+            this.player2.remoteInput = this.peerInput;
+            this.entities.push(this.player2);
+        }
+
         super.start();
     }
 
-    addNotification(text, type = 'info') {
+    addNotification(text, type = 'info', forPlayer = 0) {
         const duration = type === 'info' ? 4.0 : 2.5;
         this.notifications.push({
             id: this.nextNotificationId++,
             text,
             type,
+            forPlayer,
             timer: duration,
             maxTimer: duration,
             opacity: 1
@@ -84,24 +136,33 @@ export class PinataGame extends Game {
         this.currency = Math.max(0, (timeCandies + this.killCandies) - this.spentCandies);
         this.score = this.currency;
 
-        if (!this.player || this.player.hp <= 0) return;
+        // Game over when both players dead (or single player dead)
+        if (this.multiplayer && this.player2) {
+            if (this.player.hp <= 0 && this.player2.hp <= 0) {
+                this.triggerGameOver();
+                return;
+            }
+            this.player2.remoteInput = this.peerInput;
+            if (this.peerInput.punch && !this.lastPeerPunch) {
+                this.player2.attack();
+            }
+            this.lastPeerPunch = !!this.peerInput.punch;
+        } else if (!this.player || this.player.hp <= 0) {
+            return;
+        }
 
-        // Spawning Enemies (easier first 15–20s: slower spawn, then ramp)
+        // Spawning Enemies (easier first N s: slower spawn, then ramp)
         this.enemySpawnTimer += dt;
-        const maxEnemies = 10;
-        const easeSeconds = 20;
-        const earlySpawnInterval = 7;
-        const effectiveSpawnInterval = this.survivalTime < easeSeconds
-            ? earlySpawnInterval
+        const effectiveSpawnInterval = this.survivalTime < this.easeSeconds
+            ? this.earlySpawnInterval
             : this.spawnInterval;
-        const hardThreshold = 75;
         if (this.enemySpawnTimer > effectiveSpawnInterval) {
             this.enemySpawnTimer = 0;
-            if (this.enemies.length < maxEnemies) {
+            if (this.enemies.length < this.maxEnemies) {
                 this.spawnEnemy();
-                if (this.survivalTime >= easeSeconds && this.spawnInterval > 0.5) {
-                    const drop = this.survivalTime >= hardThreshold ? 0.1 : 0.05;
-                    this.spawnInterval = Math.max(this.survivalTime >= hardThreshold ? 0.35 : 0.5, this.spawnInterval - drop);
+                if (this.survivalTime >= this.easeSeconds && this.spawnInterval > 0.5) {
+                    const drop = this.survivalTime >= this.hardThreshold ? 0.1 : 0.05;
+                    this.spawnInterval = Math.max(this.survivalTime >= this.hardThreshold ? 0.35 : 0.5, this.spawnInterval - drop);
                 }
             }
         }
@@ -115,6 +176,10 @@ export class PinataGame extends Game {
         this.enemies.forEach(e => {
             if (e.isDead && !e.rewardGiven) {
                 e.rewardGiven = true;
+                if (this.multiplayer && this.player2) {
+                    if (e.killedBy === 1) this.killsPeer++;
+                    else this.killsHost++;
+                }
 
                 if (this.survivalTime - this.lastKillTime <= this.comboWindow) {
                     this.comboCount++;
@@ -132,9 +197,9 @@ export class PinataGame extends Game {
                 this.currency += reward;
                 if (this.onCurrencyUpdate) this.onCurrencyUpdate(this.currency);
                 if (this.comboCount >= 2) {
-                    this.addNotification(`${this.comboCount}x +${reward} 🍬`, 'candy');
+                    this.addNotification(`${this.comboCount}x +${reward} 🍬`, 'candy', 'both');
                 } else {
-                    this.addNotification(`+${reward} 🍬`, 'candy');
+                    this.addNotification(`+${reward} 🍬`, 'candy', 'both');
                 }
             }
         });
@@ -142,51 +207,63 @@ export class PinataGame extends Game {
 
         // Spawning Medkits
         this.medkitSpawnTimer += dt;
-        if (this.medkitSpawnTimer > 15) {
+        if (this.medkitSpawnTimer > this.medkitSpawnInterval) {
             this.spawnMedkit();
             this.medkitSpawnTimer = 0;
         }
 
         // Spawning Upgrades
         this.upgradeSpawnTimer += dt;
-        if (this.upgradeSpawnTimer > 15) { // Every 15 seconds
+        if (this.upgradeSpawnTimer > this.upgradeSpawnInterval) {
             this.spawnUpgrade();
             this.upgradeSpawnTimer = 0;
         }
 
-        // Check Medkit pickups
+        // Check Medkit pickups (both players)
         this.medkits.forEach(m => {
-            const dist = Math.abs(this.player.x - m.x);
+            if (m.markedForDeletion) return;
+            let dist = Math.abs(this.player.x - m.x);
+            if (this.player2 && this.player2.hp > 0) {
+                dist = Math.min(dist, Math.abs(this.player2.x - m.x));
+            }
             if (dist < 50) {
                 const healAmount = m.healAmount;
-                const oldHp = this.player.hp;
-                this.player.hp = Math.min(this.player.maxHp, this.player.hp + healAmount);
-                const actualHeal = this.player.hp - oldHp;
+                let healedPlayer = this.player;
+                if (this.player2 && this.player2.hp > 0) {
+                    const d1 = Math.abs(this.player.x - m.x);
+                    const d2 = Math.abs(this.player2.x - m.x);
+                    healedPlayer = d2 < d1 ? this.player2 : this.player;
+                }
+                const oldHp = healedPlayer.hp;
+                healedPlayer.hp = Math.min(healedPlayer.maxHp, healedPlayer.hp + healAmount);
+                const actualHeal = healedPlayer.hp - oldHp;
 
                 if (actualHeal > 0) {
-                    this.addNotification(`+${actualHeal} ❤️`, 'heal');
+                    const forPlayer = healedPlayer === this.player2 ? 1 : 0;
+                    this.addNotification(`+${actualHeal} ❤️`, 'heal', forPlayer);
                 }
 
-                this.spawnHealEffect(this.player.x, this.player.y - 50);
+                this.spawnHealEffect(healedPlayer.x, healedPlayer.y - 50);
                 m.markedForDeletion = true;
             }
         });
         this.medkits = this.medkits.filter(m => !m.markedForDeletion);
 
-        // Check Upgrade pickups
+        // Check Upgrade pickups (both players)
         this.upgrades.forEach(u => {
-            const dist = Math.abs(this.player.x - u.x);
-            if (dist < 50) {
-                // Pass duration for time-based upgrade
-                this.player.applyUpgrade(u.type, u.amount, u.duration);
-
-                if (u.type === 'speed') {
-                    this.addNotification(`⚡ Speed +${u.amount} for ${u.duration}s!`, 'info');
-                } else {
-                    this.addNotification(`💥 Knockback +${u.amount} for ${u.duration}s!`, 'info');
+            if (u.markedForDeletion) return;
+            let dist = Math.abs(this.player.x - u.x);
+            let pickingPlayer = this.player;
+            if (this.player2 && this.player2.hp > 0) {
+                const d2 = Math.abs(this.player2.x - u.x);
+                if (d2 < dist) {
+                    dist = d2;
+                    pickingPlayer = this.player2;
                 }
-
-                this.spawnUpgradeEffect(this.player.x, this.player.y - 50, u.type);
+            }
+            if (dist < 50) {
+                pickingPlayer.applyUpgrade(u.type, u.amount, u.duration);
+                this.spawnUpgradeEffect(pickingPlayer.x, pickingPlayer.y - 50, u.type);
                 u.markedForDeletion = true;
             }
         });
@@ -213,7 +290,13 @@ export class PinataGame extends Game {
 
         if (this.comboDisplayTimer > 0) this.comboDisplayTimer -= dt;
 
-        this.entities = [this.player, ...this.enemies, ...this.medkits, ...this.upgrades];
+        this.entities = [
+            this.player,
+            ...(this.player2 ? [this.player2] : []),
+            ...this.enemies,
+            ...this.medkits,
+            ...this.upgrades
+        ];
 
         // UI is updated at the top of update() to ensure consistency
 
@@ -234,6 +317,24 @@ export class PinataGame extends Game {
         }
         super.draw();
         this.particles.forEach(p => p.draw(ctx));
+
+        if (this.multiplayer && this.playerNames?.length) {
+            const nameTagH = 18;
+            const scale = 0.5;
+            const frameH = 170 * scale;
+            [this.player, this.player2].forEach((p, i) => {
+                if (!p) return;
+                const name = this.playerNames[i] || `Player ${i + 1}`;
+                ctx.save();
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const nameY = p.y - frameH - nameTagH - 4;
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillText(name, p.x, nameY + nameTagH / 2);
+                ctx.restore();
+            });
+        }
 
         if (this.comboDisplayTimer > 0 && this.comboCount >= 2) {
             const t = this.comboDisplayTimer;
@@ -278,9 +379,9 @@ export class PinataGame extends Game {
             }
         }
 
-        // Difficulty: ease in first 20s, then ramp. After 75s spike hard so upgrades are required
-        const easeSeconds = 20;
-        const hardThreshold = 75;
+        // Difficulty: ease in first N s, then ramp; after hardThreshold spike hard
+        const easeSeconds = this.easeSeconds;
+        const hardThreshold = this.hardThreshold;
         let difficulty;
         if (time < easeSeconds) {
             difficulty = 0.5 + 0.5 * (time / easeSeconds);
@@ -288,7 +389,7 @@ export class PinataGame extends Game {
             difficulty = 1 + (time - easeSeconds) / 60;
         } else {
             const baseAt75 = 1 + (hardThreshold - easeSeconds) / 60;
-            difficulty = baseAt75 + (time - hardThreshold) / 12; // steep ramp after 75s
+            difficulty = baseAt75 + (time - hardThreshold) / 12;
         }
 
         const enemy = new Enemy(this, side, type, difficulty);
@@ -320,6 +421,7 @@ export class PinataGame extends Game {
     }
 
     spawnExplosion(x, y) {
+        this.recentExplosions.push({ x, y, t: this.survivalTime });
         const colors = ['#ff6b9d', '#ffb3c6', '#ffffff', '#ffd93d', '#ff9ec4'];
         for (let i = 0; i < 25; i++) {
             const color = colors[Math.floor(Math.random() * colors.length)];
@@ -328,6 +430,7 @@ export class PinataGame extends Game {
     }
 
     spawnHealEffect(x, y) {
+        if (this.multiplayer) this.recentHealEffects.push({ x, y, t: this.survivalTime });
         const colors = ['#55efc4', '#00b894', '#ffffff', '#81ecec'];
         for (let i = 0; i < 15; i++) {
             const color = colors[Math.floor(Math.random() * colors.length)];
@@ -338,6 +441,7 @@ export class PinataGame extends Game {
     }
 
     spawnUpgradeEffect(x, y, type) {
+        if (this.multiplayer) this.recentUpgradeEffects.push({ x, y, type, t: this.survivalTime });
         const colors = type === 'speed'
             ? ['#3498db', '#2980b9', '#ffffff', '#74b9ff']
             : ['#e74c3c', '#c0392b', '#ffffff', '#ff7675'];
@@ -361,12 +465,26 @@ export class PinataGame extends Game {
 
         if (this.currency >= cost) {
             this.spentCandies += cost;
-            // Currency will be updated in the next loop iteration
             this.runStats[statName] = level + 1;
             if (this.player) {
                 this.player.setRunStats(this.runStats);
             }
             this.addNotification(`Upgraded ${statName}!`, 'info');
+            return true;
+        }
+        return false;
+    }
+
+    buyStatUpgradePeer(statName) {
+        if (!this.player2) return false;
+        const level = this.runStatsPeer[statName] || 0;
+        const cost = 20 + (level * 5);
+
+        if (this.currency >= cost) {
+            this.spentCandies += cost;
+            this.runStatsPeer[statName] = level + 1;
+            this.player2.setRunStats(this.runStatsPeer);
+            this.addNotification(`Upgraded ${statName}!`, 'info', 1);
             return true;
         }
         return false;
@@ -390,7 +508,8 @@ export class PinataGame extends Game {
             }
 
             if (hit) {
-                d.takeDamage(damage, knockDir, player.knockback); // Uses player's knockback stat
+                const attackerIndex = player === this.player ? 0 : 1;
+                d.takeDamage(damage, knockDir, player.knockback, attackerIndex);
                 this.triggerShake(6, 0.1);
                 if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
             }
@@ -401,12 +520,97 @@ export class PinataGame extends Game {
         return this.notifications;
     }
 
+    serializeState() {
+        if (!this.multiplayer) return null;
+        const p1 = this.player ? {
+            x: this.player.x, y: this.player.y, hp: this.player.hp, maxHp: this.player.maxHp,
+            state: this.player.state, facingRight: this.player.facingRight,
+            frameIndex: this.player.sprite?.frameIndex ?? 0,
+            invincible: !!this.player.invincible,
+            invincibleTimer: this.player.invincibleTimer ?? 0
+        } : null;
+        const p2 = this.player2 ? {
+            x: this.player2.x, y: this.player2.y, hp: this.player2.hp, maxHp: this.player2.maxHp,
+            state: this.player2.state, facingRight: this.player2.facingRight,
+            frameIndex: this.player2.sprite?.frameIndex ?? 0,
+            invincible: !!this.player2.invincible,
+            invincibleTimer: this.player2.invincibleTimer ?? 0,
+            activeBuffs: this.player2.getActiveBuffs ? this.player2.getActiveBuffs() : []
+        } : null;
+        const enemies = this.enemies.map((e) => ({
+            id: e.id || e.x + e.y, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp || 100, isDead: e.isDead,
+            type: e.type || 'normal', facingRight: e.facingRight,
+            state: e.state || 'walk', frameIndex: e.sprite?.frameIndex ?? 0
+        }));
+        const medkits = this.medkits.map((m) => ({ x: m.x, y: m.y }));
+        const upgrades = this.upgrades.map((u) => ({ x: u.x, y: u.y, type: u.type }));
+        const now = this.survivalTime;
+        const explosions = this.recentExplosions.filter((e) => now - e.t < 0.4);
+        this.recentExplosions = this.recentExplosions.filter((e) => now - e.t < 0.5);
+        const recentHealEffects = this.recentHealEffects.filter((e) => now - e.t < 0.6);
+        this.recentHealEffects = this.recentHealEffects.filter((e) => now - e.t < 0.7);
+        const recentUpgradeEffects = this.recentUpgradeEffects.filter((e) => now - e.t < 0.6);
+        this.recentUpgradeEffects = this.recentUpgradeEffects.filter((e) => now - e.t < 0.7);
+        const notifications = this.notifications
+            .filter((n) => n.forPlayer === 1 || n.forPlayer === 'both')
+            .map((n) => ({
+                id: n.id,
+                text: n.text,
+                type: n.type,
+                timer: n.timer,
+                maxTimer: n.maxTimer,
+                opacity: n.opacity
+            }));
+        const peerActiveBuffs = this.player2?.getActiveBuffs ? this.player2.getActiveBuffs() : [];
+        return {
+            t: this.survivalTime,
+            survivalTime: this.survivalTime,
+            players: [p1, p2],
+            peerActiveBuffs,
+            enemies,
+            medkits,
+            upgrades,
+            currency: this.currency,
+            clouds: this.clouds,
+            flowers: this.flowers,
+            grassBlades: this.grassBlades,
+            explosions,
+            notifications,
+            gameOver: (this.player?.hp <= 0 && (!this.player2 || this.player2.hp <= 0)),
+            comboCount: this.comboCount,
+            comboDisplayTimer: this.comboDisplayTimer,
+            width: this.width,
+            height: this.height,
+            recentHealEffects,
+            recentUpgradeEffects,
+            shakeIntensity: this.shakeIntensity,
+            shakeTimer: this.shakeTimer,
+            runStats: this.runStats,
+            runStatsPeer: this.runStatsPeer
+        };
+    }
+
     getPlayerHealth() {
         if (!this.player) return { hp: 0, maxHp: 100 };
         return { hp: this.player.hp, maxHp: this.player.maxHp };
     }
 
     triggerGameOver() {
-        if (this.onGameOver) this.onGameOver(this.score, this.currency);
+        if (!this.onGameOver) return;
+        if (this.multiplayer && this.player2) {
+            const total = this.currency;
+            const totalKills = this.killsHost + this.killsPeer;
+            const hostCandies = totalKills > 0 ? Math.round(total * this.killsHost / totalKills) : Math.floor(total / 2);
+            const peerCandies = total - hostCandies;
+            this.onGameOver(this.score, total, {
+                hostCandies,
+                peerCandies,
+                killsHost: this.killsHost,
+                killsPeer: this.killsPeer,
+                playerNames: [...(this.playerNames || ['Player 1', 'Player 2'])]
+            });
+        } else {
+            this.onGameOver(this.score, this.currency);
+        }
     }
 }

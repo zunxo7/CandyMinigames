@@ -215,30 +215,36 @@ class FallingItem {
 }
 
 export class BoboGame extends Game {
-    constructor(canvas, onGameOver, onCurrencyUpdate) {
+    constructor(canvas, onGameOver, onCurrencyUpdate, config = {}) {
         super(canvas, onGameOver);
         this.onCurrencyUpdate = onCurrencyUpdate;
+
+        this.penaltyThreshold = config.penaltyThreshold ?? 65;
+        this.pickleRainNextIncrement = config.pickleRainNextIncrement ?? 500;
+        this.pickleRainDuration = config.pickleRainDuration ?? 5;
+        this.veggieChanceBase = config.veggieChanceBase ?? 0.3;
+        this.veggieChanceMax = config.veggieChanceMax ?? 0.35;
+        this.veggieChanceScoreScale = config.veggieChanceScoreScale ?? 2500;
+        this.missedSweetPenalty = config.missedSweetPenalty ?? 1;
+        this.speedSpawnInterval = config.speedSpawnInterval ?? 25;
 
         this.player = new BoboPlayer(this);
         this.items = [];
         this.particles = [];
 
         this.spawnTimer = 0;
-        this.spawnInterval = 1.2; // slightly slower spawn for standardized rate
+        this.spawnInterval = config.spawnInterval ?? 1.2;
 
-        this.lives = 3;
+        this.lives = config.lives ?? 3;
         this.score = 0;
         this.runStats = { speed: 0 };
         this.spentCandies = 0;
 
-        // Combo: consecutive sweets add +2 each, reset on veggie or miss
         this.consecutiveSweets = 0;
 
-        // Pickle Rain
         this.isPickleRain = false;
         this.pickleRainTimer = 0;
-        this.pickleRainDuration = 5.0;
-        this.nextPickleThreshold = 100; // Every 100 points
+        this.nextPickleThreshold = config.pickleRainFirstThreshold ?? 70;
 
         this.notifications = [];
         this.nextNotificationId = 0;
@@ -340,13 +346,13 @@ export class BoboGame extends Game {
                 this.spawnTimer = 0;
                 if (this.spawnInterval > 0.55) this.spawnInterval -= 0.01;
 
-                const veggieChance = 0.3 + Math.min(0.35, this.score / 2500);
+                const veggieChance = this.veggieChanceBase + Math.min(this.veggieChanceMax, this.score / this.veggieChanceScoreScale);
                 const type = Math.random() < veggieChance ? 'veggie' : 'sweet';
                 this.spawnItem(type);
             }
 
             this.speedSpawnTimer += dt;
-            if (this.speedSpawnTimer >= 25 && this.assets.speed) {
+            if (this.speedSpawnTimer >= this.speedSpawnInterval && this.assets.speed) {
                 this.speedSpawnTimer = 0;
                 this.spawnItem('speed');
             }
@@ -367,9 +373,10 @@ export class BoboGame extends Game {
                 if (item.type === 'sweet') {
                     this.consecutiveSweets = 0;
                     this.player.triggerSad();
-                    const penalty = 1 + Math.floor(this.score / 300);
-                    this.score = Math.max(0, this.score - penalty);
-                    if (this.onCurrencyUpdate) this.onCurrencyUpdate(this.score);
+                    if (this.score >= this.penaltyThreshold) {
+                        this.score = Math.max(0, this.score - this.missedSweetPenalty);
+                        if (this.onCurrencyUpdate) this.onCurrencyUpdate(this.score);
+                    }
                 }
                 item.markedForDeletion = true;
             }
@@ -391,7 +398,7 @@ export class BoboGame extends Game {
         // Check Pickle Rain Threshold
         if (!this.isPickleRain && this.score >= this.nextPickleThreshold) {
             this.triggerPickleRain();
-            this.nextPickleThreshold += 500; // Next rain at +500
+            this.nextPickleThreshold += this.pickleRainNextIncrement;
         }
     }
 
@@ -429,11 +436,13 @@ export class BoboGame extends Game {
             return;
         } else if (item.type === 'veggie') {
             this.consecutiveSweets = 0;
-            this.lives--;
-            this.addNotification('-1 life', 'damage');
-            this.player.triggerDisgust();
-            if (this.lives <= 0) {
-                this.onGameOver(this.score, this.score);
+            if (this.score >= this.penaltyThreshold) {
+                this.lives--;
+                this.addNotification('-1 life', 'damage');
+                this.player.triggerDisgust();
+                if (this.lives <= 0) {
+                    this.onGameOver(this.score, this.score);
+                }
             }
             return;
         }
@@ -465,7 +474,7 @@ export class BoboGame extends Game {
 
     triggerPickleRain() {
         this.isPickleRain = true;
-        this.pickleRainTimer = 5.0;
+        this.pickleRainTimer = this.pickleRainDuration;
         this.spawnTimer = 0; // Immediate start
         this.addNotification('Pickle rain!', 'pickle');
     }

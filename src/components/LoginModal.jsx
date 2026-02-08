@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkle, GameController, User, Lock } from '@phosphor-icons/react';
+import { Sparkle, GameController, User, Lock, Eye, EyeSlash } from '@phosphor-icons/react';
 
 const LoginModal = ({ onSuccess }) => {
     const { signUp, signIn, signInAdmin } = useAuth();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [isSignUp, setIsSignUp] = useState(true);
+    const [showPassword, setShowPassword] = useState(false);
+    const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -18,10 +19,8 @@ const LoginModal = ({ onSuccess }) => {
             setError('Please enter a username');
             return;
         }
-
-        // Admin requires password
-        if (isAdmin && !password) {
-            setError('Please enter the admin password');
+        if (!password) {
+            setError(isAdmin ? 'Please enter the admin password' : 'Please enter your password');
             return;
         }
 
@@ -30,12 +29,11 @@ const LoginModal = ({ onSuccess }) => {
 
         try {
             if (isAdmin) {
-                // Admin uses email/password auth
                 await signInAdmin(password);
             } else if (isSignUp) {
-                await signUp(username.trim());
+                await signUp(username.trim(), password);
             } else {
-                await signIn(username.trim());
+                await signIn(username.trim(), password);
             }
             onSuccess?.();
         } catch (err) {
@@ -69,7 +67,7 @@ const LoginModal = ({ onSuccess }) => {
                     <GameController size={48} weight="fill" />
                 </div>
 
-                <h1 className="login-title">Birthday Minigames</h1>
+                <h1 className="login-title">Candy Minigames</h1>
                 <p className="login-subtitle">
                     {isAdmin ? 'Admin Login' : (isSignUp ? 'Create your player' : 'Welcome back!')}
                 </p>
@@ -88,20 +86,26 @@ const LoginModal = ({ onSuccess }) => {
                         />
                     </div>
 
-                    {/* Password field for admin */}
-                    {isAdmin && (
-                        <div className="input-group password-field">
-                            <Lock size={20} className="input-icon" />
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter admin password"
-                                className="login-input"
-                                disabled={loading}
-                            />
-                        </div>
-                    )}
+                    <div className="input-group password-field">
+                        <Lock size={20} className="input-icon" />
+                        <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder={isAdmin ? 'Enter admin password' : (isSignUp ? 'Choose password' : 'Enter password')}
+                            className="login-input login-input-with-toggle"
+                            disabled={loading}
+                        />
+                        <button
+                            type="button"
+                            className="password-toggle"
+                            onClick={() => setShowPassword((v) => !v)}
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            tabIndex={-1}
+                        >
+                            {showPassword ? <EyeSlash size={20} /> : <Eye size={20} />}
+                        </button>
+                    </div>
 
                     {error && <p className="login-error">{error}</p>}
 

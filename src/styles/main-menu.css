@@ -61,7 +61,7 @@
 .user-info {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.675rem;
 }
 
 .user-avatar {
@@ -97,7 +97,7 @@
 .user-stats {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.4rem;
 }
 
 .candy-display {
@@ -117,6 +117,46 @@
     width: 24px;
     height: 24px;
     object-fit: contain;
+}
+
+.user-bar-text-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    background: white;
+    border: 3px solid #2d2d2d;
+    border-radius: 50px;
+    color: #2d2d2d;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.user-bar-text-btn:hover {
+    background: rgba(255, 107, 157, 0.15);
+    color: #ff6b9d;
+    border-color: #ff6b9d;
+}
+
+.user-bar-icon-btn {
+    width: 40px;
+    height: 40px;
+    background: white;
+    border: 3px solid #2d2d2d;
+    border-radius: 50%;
+    color: #2d2d2d;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.user-bar-icon-btn:hover {
+    background: rgba(255, 107, 157, 0.15);
+    color: #ff6b9d;
 }
 
 .logout-btn {
@@ -228,6 +268,16 @@
 .menu-btn.secondary {
     background: white;
     color: #2d2d2d;
+}
+
+.menu-btn-featured {
+    font-weight: 800;
+    font-size: 1.1rem;
+}
+
+.user-bar-text-btn-featured {
+    font-weight: 800;
+    font-size: 1.1rem;
 }
 
 .menu-btn.admin {

@@ -112,6 +112,33 @@
     color: var(--text-muted);
 }
 
+.input-group.password-field {
+    position: relative;
+}
+
+.login-input-with-toggle {
+    padding-right: 3rem;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.password-toggle:hover {
+    color: var(--text-primary);
+}
+
 .login-error {
     color: #e74c3c;
     font-size: 0.875rem;

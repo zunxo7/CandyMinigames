@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Heart, Lightning, Pause, Skull, Trophy } from '@phosphor-icons/react';
 import { PinataGame } from '../game/PinataGame';
+import { PinataGameRenderer } from '../game/PinataGameRenderer';
+import { InputHandler } from '../game/InputHandler';
 import { FlappyGame } from '../game/FlappyGame';
 import { BoboGame } from '../game/BoboGame';
 import { useAuth } from '../context/AuthContext';
 import { useCandyMultiplier } from '../context/CandyMultiplierContext';
+import { useGameConfig } from '../context/GameConfigContext';
 import { supabase } from '../supabase';
+import { getSocket } from '../socket';
 import candyIcon from '../assets/Candy Icon.webp';
 import heartImg from '../assets/Heart.webp';
 import medkitImg from '../assets/Medkit.webp';
@@ -25,12 +29,12 @@ import InGameUpgrades from './InGameUpgrades';
 const TUTORIALS = {
     pinata: {
         title: 'Crumb Clash',
-        controls: ['Click or tap to punch', 'Space to punch', 'Move with mouse / touch'],
+        controls: ['Click or Space to punch', 'A / D or Arrow keys to move left and right', 'Up arrow or W to jump'],
         goal: 'Survive as long as you can. Punch enemies from the sides and collect candy.',
         upgrades: [
             { img: medkitImg, label: 'Medkit', desc: 'Restores health' },
-            { img: speedImg, label: 'Speed', desc: 'Temporary movement boost' },
-            { img: knockbackImg, label: 'Knockback', desc: 'Temporary stronger punches' }
+            { img: speedImg, label: 'Speed', desc: '+100 speed for 10s' },
+            { img: knockbackImg, label: 'Knockback', desc: '+150 knockback for 10s' }
         ],
         upgradesNote: 'Open STATS (trophy) to spend candy on permanent upgrades: Damage, Punch Speed, Knockback, Movement, Max Health. After 75s it gets much harder — upgrade or die!'
     },
@@ -45,34 +49,45 @@ const TUTORIALS = {
     cake: {
         title: 'Bobo Catch',
         controls: ['A / D or Arrow keys to move left and right'],
-        goal: 'Fill the basket! Use STATS to buy speed.',
+        goal: 'Fill the basket! Use STATS to buy speed. Penalties start at 65 candies.',
         catch: [
             { img: cakeImg, label: 'Cake' },
             { img: cupcakeImg, label: 'Cupcake' },
             { img: donutImg, label: 'Donut' },
-            { img: lollipopImg, label: 'Lollipop' },
-            { img: candyIcon, label: 'Candy' }
+            { img: lollipopImg, label: 'Lollipop' }
         ],
         avoid: [
             { img: carrotImg, label: 'Carrot' },
             { img: eggplantImg, label: 'Eggplant' },
             { img: capsicumImg, label: 'Capsicum' },
-            { img: broccoliImg, label: 'Broccoli' },
-            { img: pickleImg, label: 'Pickle' }
+            { img: broccoliImg, label: 'Broccoli' }
+        ],
+        special: [
+            { img: pickleImg, label: 'Pickle', desc: 'Special event starts at 70 candies. Catch for +2.' }
         ]
     }
 };
 
-const GameCanvas = ({ gameType, onBack }) => {
+const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHost = false }) => {
     const canvasRef = useRef(null);
+    const containerRef = useRef(null);
     const gameRef = useRef(null);
+    const hostSocketRef = useRef(null);
+    const peerUsernameRef = useRef(null);
+    const peerUsernameSentRef = useRef(false);
+    const peerPunchClickRef = useRef(false);
     const isMountedRef = useRef(true);
     const gameOverRef = useRef(false);
     const visibilityPausedRef = useRef(false);
+    const isUpdatingRef = useRef(false);
+    isUpdatingRef.current = isUpdating;
     const { user, profile, updateCandies } = useAuth();
     const { multiplier: candyMultiplier } = useCandyMultiplier();
+    const { config: gameConfig } = useGameConfig();
     const candyMultiplierRef = useRef(candyMultiplier);
     candyMultiplierRef.current = candyMultiplier;
+    const profileRef = useRef(profile);
+    profileRef.current = profile;
     const [currency, setCurrency] = useState(0);
     const [gameOver, setGameOver] = useState(false);
     const [finalScore, setFinalScore] = useState({ score: 0, currency: 0 });
@@ -103,7 +118,7 @@ const GameCanvas = ({ gameType, onBack }) => {
         setFinalScore({ score: 0, currency: 0 });
         setIsPaused(false);
         setShowVisibilityPauseOverlay(false);
-        const wantTutorial = profile?.show_tutorials !== false;
+        const wantTutorial = roomId ? false : (profile?.show_tutorials !== false);
         setShowTutorial(wantTutorial);
         setAssetsLoading(true);
         gameOverRef.current = false;
@@ -122,26 +137,202 @@ const GameCanvas = ({ gameType, onBack }) => {
             gameRef.current = null;
         }
 
+        const isMultiplayerHost = roomId && isHost;
+        const isMultiplayerPeer = roomId && !isHost;
+
+        // --- Multiplayer peer: render from state, send input ---
+        if (isMultiplayerPeer) {
+            canvas.width = Math.max(300, window.innerWidth);
+            canvas.height = Math.max(200, window.innerHeight);
+            const renderer = new PinataGameRenderer(canvas);
+            const stateRef = { current: null };
+            const input = new InputHandler();
+            const socket = getSocket();
+            const crumbRoom = `crumb_room:${roomId}`;
+            socket.emit('join_room', crumbRoom);
+            socket.emit('peer_username', profile?.username || 'Player 2');
+            if (profile?.username) peerUsernameSentRef.current = true;
+            const lastClaimedMedkitX = { current: null };
+            const lastClaimedUpgradeX = { current: null };
+            let rafId = 0;
+            let running = true;
+
+            const sendInput = () => {
+                const punch = input.isDown(' ') || peerPunchClickRef.current;
+                if (peerPunchClickRef.current) peerPunchClickRef.current = false;
+                const keys = {
+                    left: input.isDown('a') || input.isDown('arrowleft'),
+                    right: input.isDown('d') || input.isDown('arrowright'),
+                    jump: input.isDown('w') || input.isDown('arrowup'),
+                    punch
+                };
+                socket.emit('input', keys);
+            };
+
+            const doDraw = () => {
+                if (!running || !isMountedRef.current || !renderer.ctx) return;
+                if (stateRef.current) renderer.draw(stateRef.current);
+            };
+
+            socket.on('state', (s) => {
+                stateRef.current = s;
+                doDraw();
+                if (s?.gameOver && s?.currency != null) {
+                    running = false;
+                    gameOverRef.current = true;
+                    const mult = candyMultiplierRef.current;
+                    if (s.multiplayerResult) {
+                        const peerToAdd = Math.round((s.peerCandies ?? 0) * mult);
+                        setGameOver(true);
+                        setFinalScore({ multiplayerResult: s.multiplayerResult });
+                        updateCandies(peerToAdd);
+                    } else {
+                        const candiesToAdd = Math.round((s.currency ?? 0) * mult);
+                        setGameOver(true);
+                        setFinalScore({ score: s.currency, currency: candiesToAdd });
+                        updateCandies(candiesToAdd);
+                    }
+                    setAssetsLoading(false);
+                }
+            });
+
+            socket.on('host_left', () => {
+                running = false;
+                gameOverRef.current = true;
+                const s = stateRef.current;
+                const mult = candyMultiplierRef.current;
+                const cur = s?.currency ?? 0;
+                if (s?.multiplayerResult && s.peerCandies != null) {
+                    const peerToAdd = Math.round((s.peerCandies ?? 0) * mult);
+                    setGameOver(true);
+                    setFinalScore({ multiplayerResult: s.multiplayerResult });
+                    updateCandies(peerToAdd);
+                } else {
+                    const candiesToAdd = Math.round(cur * mult);
+                    setGameOver(true);
+                    setFinalScore({ score: cur, currency: candiesToAdd });
+                    updateCandies(candiesToAdd);
+                }
+                setAssetsLoading(false);
+            });
+
+            (async () => {
+                await renderer.loadAssets();
+                if (isMountedRef.current) {
+                    setAssetsLoading(false);
+                    doDraw();
+                }
+            })();
+
+            const inputInterval = setInterval(sendInput, 50);
+            const renderInterval = setInterval(doDraw, 50);
+            const renderLoop = () => {
+                if (!running || !isMountedRef.current) return;
+                doDraw();
+                rafId = requestAnimationFrame(renderLoop);
+            };
+            rafId = requestAnimationFrame(renderLoop);
+
+            // Peer HUD: update from state (health, currency, notifications); re-send username when profile loads; claim medkit when P2 in range
+            const peerHudInterval = setInterval(() => {
+                const s = stateRef.current;
+                if (s?.players?.[1]) {
+                    const p2 = s.players[1];
+                    setPlayerHealth({ hp: p2.hp, maxHp: p2.maxHp || 100 });
+                    if (!peerUsernameSentRef.current && profileRef.current?.username) {
+                        socket.emit('peer_username', profileRef.current.username);
+                        peerUsernameSentRef.current = true;
+                    }
+                    const medkits = s.medkits || [];
+                    const inRangeMedkit = medkits.find((m) => Math.abs(p2.x - m.x) < 50);
+                    if (inRangeMedkit && lastClaimedMedkitX.current !== inRangeMedkit.x) {
+                        socket.emit('claim_medkit', { x: inRangeMedkit.x });
+                        lastClaimedMedkitX.current = inRangeMedkit.x;
+                    }
+                    const stillHasClaimedMedkit = medkits.some((m) => Math.abs(m.x - lastClaimedMedkitX.current) < 30);
+                    if (!stillHasClaimedMedkit) lastClaimedMedkitX.current = null;
+
+                    const upgrades = s.upgrades || [];
+                    const inRangeUpgrade = upgrades.find((u) => Math.abs(p2.x - u.x) < 50);
+                    if (inRangeUpgrade && lastClaimedUpgradeX.current !== inRangeUpgrade.x) {
+                        socket.emit('claim_upgrade', { x: inRangeUpgrade.x });
+                        lastClaimedUpgradeX.current = inRangeUpgrade.x;
+                    }
+                    const stillHasClaimedUpgrade = upgrades.some((u) => Math.abs(u.x - lastClaimedUpgradeX.current) < 30);
+                    if (!stillHasClaimedUpgrade) lastClaimedUpgradeX.current = null;
+                }
+                if (s?.currency != null) setCurrency(s.currency);
+                if (Array.isArray(s?.notifications)) setNotifications(s.notifications);
+                if (Array.isArray(s?.peerActiveBuffs)) setActiveBuffs(s.peerActiveBuffs);
+                if (s?.runStatsPeer) setRunStats({ ...s.runStatsPeer });
+            }, 100);
+
+            return () => {
+                isMountedRef.current = false;
+                running = false;
+                cancelAnimationFrame(rafId);
+                clearInterval(renderInterval);
+                clearInterval(inputInterval);
+                clearInterval(peerHudInterval);
+                socket.off('state');
+                socket.off('host_left');
+                input.destroy();
+                renderer.destroy();
+                gameRef.current = null;
+            };
+        }
+
+        // --- Host or single player ---
         const GameEngine = gameType === 'flappy' ? FlappyGame :
             gameType === 'cake' ? BoboGame : PinataGame;
+        const config = { ...(gameConfig[gameType] || {}) };
+        if (isMultiplayerHost) config.multiplayer = { isHost: true, roomId };
+
+        let broadcastInterval = null;
+        let crumbSocket = null;
+
         const game = new GameEngine(
             canvas,
-            (score, curr) => {
+            (score, curr, multiplayerResult) => {
                 if (!isMountedRef.current || gameRef.current !== game) return;
                 gameOverRef.current = true;
                 const mult = candyMultiplierRef.current;
-                const candiesToAdd = Math.round((curr ?? score ?? 0) * mult);
-                setGameOver(true);
-                setFinalScore({ score, currency: candiesToAdd });
-                updateCandies(candiesToAdd);
-                saveHighScore(score);
+                if (multiplayerResult) {
+                    const { hostCandies, peerCandies, playerNames } = multiplayerResult;
+                    const total = curr ?? score ?? 0;
+                    const hostToAdd = Math.round(hostCandies * mult);
+                    if (isMultiplayerHost && crumbSocket && typeof game.serializeState === 'function') {
+                        const finalState = game.serializeState();
+                        if (finalState) {
+                            finalState.playerNames = playerNames || [profile?.username || 'Player 1', peerUsernameRef.current || 'Player 2'];
+                            crumbSocket.emit('state', {
+                                ...finalState,
+                                gameOver: true,
+                                currency: total,
+                                peerCandies,
+                                hostCandies,
+                                multiplayerResult: { total, hostCandies, peerCandies, playerNames: finalState.playerNames }
+                            });
+                        }
+                    }
+                    setGameOver(true);
+                    setFinalScore({ multiplayerResult: { total, hostCandies, peerCandies, playerNames } });
+                    updateCandies(hostToAdd);
+                } else {
+                    const candiesToAdd = Math.round((curr ?? score ?? 0) * mult);
+                    setGameOver(true);
+                    setFinalScore({ score, currency: candiesToAdd });
+                    updateCandies(candiesToAdd);
+                    saveHighScore(score);
+                }
                 game.stop();
             },
             (curr) => {
                 if (isMountedRef.current && gameRef.current === game) {
                     setCurrency(curr);
                 }
-            }
+            },
+            config
         );
 
         const saveHighScore = async (score) => {
@@ -200,6 +391,43 @@ const GameCanvas = ({ gameType, onBack }) => {
         fetchBestScore();
 
         gameRef.current = game;
+
+        if (isMultiplayerHost && roomId) {
+            crumbSocket = getSocket();
+            hostSocketRef.current = crumbSocket;
+            peerUsernameRef.current = null;
+            crumbSocket.emit('join_room', `crumb_room:${roomId}`);
+            crumbSocket.on('peer_username', (name) => {
+                peerUsernameRef.current = name || 'Player 2';
+            });
+            crumbSocket.on('claim_medkit', (data) => {
+                if (gameRef.current?.applyPeerMedkitClaim && data?.x != null) {
+                    gameRef.current.applyPeerMedkitClaim(data.x);
+                }
+            });
+            crumbSocket.on('claim_upgrade', (data) => {
+                if (gameRef.current?.applyPeerUpgradeClaim && data?.x != null) {
+                    gameRef.current.applyPeerUpgradeClaim(data.x);
+                }
+            });
+            crumbSocket.on('buy_stat', (data) => {
+                if (gameRef.current?.buyStatUpgradePeer && data?.stat) {
+                    gameRef.current.buyStatUpgradePeer(data.stat);
+                }
+            });
+            crumbSocket.on('input', (payload) => {
+                if (game.peerInput && payload) {
+                    game.peerInput.left = !!payload.left;
+                    game.peerInput.right = !!payload.right;
+                    game.peerInput.jump = !!payload.jump;
+                    game.peerInput.punch = !!payload.punch;
+                }
+            });
+            crumbSocket.on('peer_left', () => {
+                if (gameRef.current?.triggerGameOver) gameRef.current.triggerGameOver();
+            });
+        }
+
         (async () => {
             try {
                 if (typeof game.loadAssets === 'function') {
@@ -208,7 +436,21 @@ const GameCanvas = ({ gameType, onBack }) => {
             } finally {
                 if (isMountedRef.current && gameRef.current === game) {
                     setAssetsLoading(false);
-                    if (!wantTutorial) game.start();
+                    if (!wantTutorial) {
+                        game.start();
+                        if (isMultiplayerHost && roomId && typeof game.serializeState === 'function') {
+                            broadcastInterval = setInterval(() => {
+                                if (gameRef.current !== game || game.isStopped || !game.hasStarted) return;
+                                const names = [profile?.username || 'Player 1', peerUsernameRef.current || 'Player 2'];
+                                game.playerNames = names;
+                                const state = game.serializeState();
+                                if (state) {
+                                    state.playerNames = names;
+                                    crumbSocket?.emit('state', state);
+                                }
+                            }, 50);
+                        }
+                    }
                 }
             }
         })();
@@ -221,7 +463,9 @@ const GameCanvas = ({ gameType, onBack }) => {
                         maxHp: game.player.maxHp
                     });
                 }
-                setNotifications([...game.getNotifications()]);
+                const allNotifs = game.getNotifications();
+                const hostNotifs = allNotifs.filter((n) => n.forPlayer === 0 || n.forPlayer === 'both');
+                setNotifications([...hostNotifs]);
 
                 if (gameType === 'flappy') {
                     setIsFlappyStarted(game.isGameStarted);
@@ -246,10 +490,8 @@ const GameCanvas = ({ gameType, onBack }) => {
 
         const handleVisibilityChange = () => {
             const hidden = document.hidden;
-            const hasGame = !!gameRef.current;
-            const isStopped = gameRef.current?.isStopped;
-            const goRef = gameOverRef.current;
             const visPaused = visibilityPausedRef.current;
+            const pauseOnTab = profileRef.current?.pause_on_tab_switch !== false;
             if (!hidden) {
                 if (visPaused && gameRef.current && !gameRef.current.isStopped) {
                     gameRef.current.pause();
@@ -258,7 +500,7 @@ const GameCanvas = ({ gameType, onBack }) => {
                 }
                 return;
             }
-            if (!gameRef.current || !gameRef.current.hasStarted || gameRef.current.isStopped || gameOverRef.current) {
+            if (!pauseOnTab || !gameRef.current || !gameRef.current.hasStarted || gameRef.current.isStopped || gameOverRef.current) {
                 return;
             }
             visibilityPausedRef.current = true;
@@ -271,12 +513,22 @@ const GameCanvas = ({ gameType, onBack }) => {
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             isMountedRef.current = false;
+            hostSocketRef.current = null;
             clearInterval(hudInterval);
+            if (broadcastInterval) clearInterval(broadcastInterval);
+            if (crumbSocket) {
+                crumbSocket.off('input');
+                crumbSocket.off('claim_medkit');
+                crumbSocket.off('claim_upgrade');
+                crumbSocket.off('buy_stat');
+                crumbSocket.off('peer_username');
+                crumbSocket.off('peer_left');
+            }
             if (game) game.stop();
             gameRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [gameType, user?.id]);
+    }, [gameType, user?.id, roomId, isHost]);
 
     const handleBackClick = (e) => {
         e.stopPropagation();
@@ -288,11 +540,24 @@ const GameCanvas = ({ gameType, onBack }) => {
             handleLeave();
             return;
         }
+        if (roomId && !isHost) {
+            getSocket().emit('peer_left');
+            return;
+        }
         if (isPaused || showVisibilityPauseOverlay) {
             handleReturnFromPause(e);
             return;
         }
         if (gameRef.current && (gameRef.current.player || gameRef.current.score !== undefined || gameRef.current.currency !== undefined)) {
+            if (roomId && isHost && typeof gameRef.current.triggerGameOver === 'function') {
+                gameRef.current.triggerGameOver();
+                hostSocketRef.current?.emit('host_left');
+                gameRef.current = null;
+                return;
+            }
+            if (roomId && isHost && hostSocketRef.current) {
+                hostSocketRef.current.emit('host_left');
+            }
             const scoreVal = gameRef.current.score ?? 0;
             const earnedCandies = gameType === 'cake' ? scoreVal : (gameRef.current.currency ?? gameRef.current.score ?? 0);
             const candiesToAdd = Math.round(Number(earnedCandies) * candyMultiplier);
@@ -304,6 +569,9 @@ const GameCanvas = ({ gameType, onBack }) => {
             saveHighScoreRef.current?.(scoreVal);
             gameRef.current = null;
         } else {
+            if (roomId && isHost && hostSocketRef.current) {
+                hostSocketRef.current.emit('host_left');
+            }
             onBack();
         }
     };
@@ -318,6 +586,25 @@ const GameCanvas = ({ gameType, onBack }) => {
             visibilityPausedRef.current = false;
         }
     }, [gameOver]);
+
+    // When "Updating" mode turns on: stop the game, trigger game over, block inputs
+    useEffect(() => {
+        if (!isUpdating) return;
+        const g = gameRef.current;
+        if (!g || g.isStopped || !g.hasStarted) return;
+        const scoreVal = g.score ?? 0;
+        const earnedCandies = gameType === 'cake' ? scoreVal : (g.currency ?? g.score ?? 0);
+        const candiesToAdd = Math.round(Number(earnedCandies) * candyMultiplierRef.current);
+        g.stop();
+        gameOverRef.current = true;
+        setGameOver(true);
+        setFinalScore({ score: scoreVal, currency: candiesToAdd });
+        updateCandies(candiesToAdd);
+        saveHighScoreRef.current?.(scoreVal);
+        gameRef.current = null;
+        setIsPaused(false);
+        setShowVisibilityPauseOverlay(false);
+    }, [isUpdating, gameType, updateCandies]);
 
     const handleReturnFromPause = (e) => {
         e.stopPropagation();
@@ -353,6 +640,7 @@ const GameCanvas = ({ gameType, onBack }) => {
         if (gameType !== 'flappy' && gameType !== 'pinata') return;
         const onKey = (e) => {
             if (e.key !== ' ') return;
+            if (isUpdatingRef.current) return;
             const g = gameRef.current;
             if (g && !gameOverRef.current && !g.isStopped && !g.isPaused) {
                 e.preventDefault();
@@ -363,10 +651,23 @@ const GameCanvas = ({ gameType, onBack }) => {
         return () => window.removeEventListener('keydown', onKey);
     }, [gameType]);
 
+    useEffect(() => {
+        if (roomId && !isHost && !assetsLoading && containerRef.current && typeof document !== 'undefined') {
+            containerRef.current.focus({ preventScroll: true });
+        }
+    }, [roomId, isHost, assetsLoading]);
+
     return (
         <div
+            ref={containerRef}
+            tabIndex={0}
             className={`game-container ${gameOver ? 'cursor-default' : 'cursor-crosshair'}`}
             onClick={() => {
+                if (isUpdatingRef.current) return;
+                if (roomId && !isHost) {
+                    if (!gameOver && !isPaused && !showVisibilityPauseOverlay) peerPunchClickRef.current = true;
+                    return;
+                }
                 if (gameRef.current && !gameOver && !isPaused && !showVisibilityPauseOverlay) gameRef.current.handleInput('attack');
             }}
         >
@@ -400,6 +701,7 @@ const GameCanvas = ({ gameType, onBack }) => {
 
                     {gameType === 'flappy' && !gameOver && (
                         <div className="health-container health-hearts">
+                            <span className="flappy-lives-count" aria-label={`${flappyLives} lives`}>{flappyLives}</span>
                             {[0, 1].map((i) => (
                                 <img
                                     key={i}
@@ -485,7 +787,11 @@ const GameCanvas = ({ gameType, onBack }) => {
                     runStats={runStats}
                     currency={currency}
                     onBuy={(stat) => {
-                        if (gameRef.current) gameRef.current.buyStatUpgrade(stat);
+                        if (roomId && !isHost) {
+                            getSocket().emit('buy_stat', { stat });
+                        } else if (gameRef.current) {
+                            gameRef.current.buyStatUpgrade(stat);
+                        }
                     }}
                     onClose={() => {
                         setShowStats(false);
@@ -560,16 +866,42 @@ const GameCanvas = ({ gameType, onBack }) => {
                 <div className={`game-over-overlay mode-${gameType}`}>
                     <h1 className="game-over-title">Game Over</h1>
                     <div className="game-over-card">
-                        <div className="score-display">
-                            <img src={candyIcon} alt="Candy" className="candy-icon-large" />
-                            <span className="final-score">{finalScore.currency}</span>
-                        </div>
-
-                        <div className="best-score-container">
-                            <span className="best-label">BEST:</span>
-                            <img src={candyIcon} alt="Candy" className="candy-icon-small" />
-                            <span className="best-score-value">{Math.max(bestScore, finalScore.score)}</span>
-                        </div>
+                        {finalScore.multiplayerResult ? (
+                            <>
+                                <div className="score-display">
+                                    <img src={candyIcon} alt="Candy" className="candy-icon-large" />
+                                    <span className="final-score">{finalScore.multiplayerResult.total}</span>
+                                </div>
+                                <div className="multiplayer-breakdown">
+                                    <div className="player-candy-row">
+                                        <span className="player-candy-name">{finalScore.multiplayerResult.playerNames?.[0] || 'Player 1'}</span>
+                                        <span className="player-candy-value">
+                                            <img src={candyIcon} alt="" className="candy-icon-small" />
+                                            <span className="player-candy-amount">{finalScore.multiplayerResult.hostCandies}</span>
+                                        </span>
+                                    </div>
+                                    <div className="player-candy-row">
+                                        <span className="player-candy-name">{finalScore.multiplayerResult.playerNames?.[1] || 'Player 2'}</span>
+                                        <span className="player-candy-value">
+                                            <img src={candyIcon} alt="" className="candy-icon-small" />
+                                            <span className="player-candy-amount">{finalScore.multiplayerResult.peerCandies}</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="score-display">
+                                    <img src={candyIcon} alt="Candy" className="candy-icon-large" />
+                                    <span className="final-score">{finalScore.currency}</span>
+                                </div>
+                                <div className="best-score-container">
+                                    <span className="best-label">BEST:</span>
+                                    <img src={candyIcon} alt="Candy" className="candy-icon-small" />
+                                    <span className="best-score-value">{Math.max(bestScore, finalScore.score)}</span>
+                                </div>
+                            </>
+                        )}
 
                         <button onClick={handleLeave} className="return-btn">
                             Return to Games
@@ -641,7 +973,7 @@ const GameCanvas = ({ gameType, onBack }) => {
                                 </div>
                             </div>
                         )}
-                        {gameType === 'cake' && (TUTORIALS.cake.catch?.length || TUTORIALS.cake.avoid?.length) && (
+                        {gameType === 'cake' && (TUTORIALS.cake.catch?.length || TUTORIALS.cake.avoid?.length || TUTORIALS.cake.special?.length) && (
                             <div className="tutorial-section tutorial-upgrades">
                                 <span className="tutorial-label">Catch (sweets)</span>
                                 <div className="tutorial-icons-row">
@@ -661,6 +993,20 @@ const GameCanvas = ({ gameType, onBack }) => {
                                         </div>
                                     ))}
                                 </div>
+                                {TUTORIALS.cake.special?.length > 0 && (
+                                    <>
+                                        <span className="tutorial-label">Special</span>
+                                        <div className="tutorial-icons-row tutorial-special-row">
+                                            {TUTORIALS.cake.special.map((s, i) => (
+                                                <div key={i} className="tutorial-icon-item" title={s.label}>
+                                                    <img src={s.img} alt="" className="tutorial-icon-img" />
+                                                    <span className="tutorial-icon-label">{s.label}</span>
+                                                    {s.desc && <span className="tutorial-icon-desc">{s.desc}</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                         <button

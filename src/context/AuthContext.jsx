@@ -24,10 +24,9 @@ export const AuthProvider = ({ children }) => {
         return data;
     };
 
-    // Sign up with username
-    const signUp = async (username) => {
-        const email = `${username.toLowerCase()}@minigames.local`;
-        const password = username.toLowerCase();
+    // Sign up with username and password (case-sensitive)
+    const signUp = async (username, password) => {
+        const email = `${username.trim()}@minigames.local`;
 
         const { data, error } = await supabase.auth.signUp({
             email,
@@ -53,10 +52,9 @@ export const AuthProvider = ({ children }) => {
         return data;
     };
 
-    // Sign in with username
-    const signIn = async (username) => {
-        const email = `${username.toLowerCase()}@minigames.local`;
-        const password = username.toLowerCase();
+    // Sign in with username and password (case-sensitive)
+    const signIn = async (username, password) => {
+        const email = `${username.trim()}@minigames.local`;
 
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
@@ -160,6 +158,24 @@ export const AuthProvider = ({ children }) => {
 
         return () => subscription.unsubscribe();
     }, []);
+
+    // Realtime: when this user's profile is updated (ban, unban, username, etc.), sync local profile immediately
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const channel = supabase
+            .channel('profile_updates')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+                if (payload.new?.id === user.id) {
+                    setProfile({ ...payload.new });
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
 
     return (
         <AuthContext.Provider value={{

@@ -10,7 +10,8 @@ import {
     GearSix,
     SlidersHorizontal,
     Cake,
-    Cookie
+    Cookie,
+    Users
 } from '@phosphor-icons/react';
 import candyIcon from '../assets/Candy Icon.webp';
 
@@ -23,9 +24,10 @@ const FLOAT_CAKES = [
     { Icon: Cookie, size: 30, top: '18%', right: '8%', delay: 0.8, duration: 6 },
 ];
 
-const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
+const MainMenu = ({ onPlay, onMultiplayer, onShop, onLeaderboard, onSettings, onPanel }) => {
     const { profile, signOut } = useAuth();
     const isAdmin = profile?.username?.toLowerCase() === 'admin';
+    const showShop = profile?.username?.toLowerCase() === 'fatima';
 
     return (
         <div className="main-menu">
@@ -87,6 +89,9 @@ const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
                         <img src={candyIcon} alt="Candy" className="candy-icon" />
                         <span>{profile?.candies || 0}</span>
                     </div>
+                    <button className="user-bar-icon-btn" onClick={onSettings} title="Settings">
+                        <GearSix size={22} weight="fill" />
+                    </button>
                     <button className="logout-btn" onClick={signOut} title="Logout">
                         <SignOut size={20} weight="bold" />
                     </button>
@@ -100,7 +105,7 @@ const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.95, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
                 >
-                    <span className="title-line">Birthday</span>
+                    <span className="title-line">Candy</span>
                     <span className="title-line accent">Minigames</span>
                 </motion.h1>
 
@@ -116,10 +121,10 @@ const MainMenu = ({ onPlay, onShop, onLeaderboard, onSettings, onPanel }) => {
                 <div className="menu-buttons">
                     {[
                         { onClick: onPlay, className: 'primary', Icon: GameController, label: 'Play' },
-                        { onClick: onShop, className: 'secondary', Icon: Storefront, label: 'Shop' },
-                        { onClick: onLeaderboard, className: 'secondary', Icon: Trophy, label: 'Leaderboard' },
-                        { onClick: onSettings, className: 'secondary', Icon: SlidersHorizontal, label: 'Settings' },
-                        ...(isAdmin ? [{ onClick: onPanel, className: 'admin', Icon: GearSix, label: 'Panel' }] : []),
+                        ...(showShop ? [{ onClick: onShop, className: 'secondary menu-btn-featured', Icon: Storefront, label: 'Shop' }] : []),
+                        { onClick: onMultiplayer, className: 'secondary menu-btn-featured', Icon: Users, label: 'Multiplayer' },
+                        { onClick: onLeaderboard, className: 'secondary menu-btn-featured', Icon: Trophy, label: 'Leaderboard' },
+                        ...(isAdmin ? [{ onClick: onPanel, className: 'admin', Icon: SlidersHorizontal, label: 'Panel' }] : []),
                     ].map(({ onClick, className, Icon, label }, i) => (
                         <motion.button
                             key={label}

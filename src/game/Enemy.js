@@ -76,6 +76,7 @@ export class Enemy {
         this.damage = Math.max(1, Math.floor(baseDamage * difficultyMultiplier));
         this.isDead = false;
         this.rewardGiven = false;
+        this.killedBy = 0;
         this.knockbackX = 0;
         this.attackCooldown = 0;
         this.attackTimer = 0;
@@ -115,16 +116,18 @@ export class Enemy {
             this.attackTimer += dt;
             this.sprite.update(dt);
 
-            // Deal damage mid-attack
+            // Deal damage mid-attack (to target player or any in-range player)
             if (this.attackTimer >= 0.25 && !this.hasDealtDamage) {
                 this.hasDealtDamage = true;
-                const player = this.game.player;
-                const dist = Math.abs(player.x - this.x);
                 const groundY = this.game.height - 200;
-                const isPlayerTooHigh = player.y < groundY - 60; // Dodge if jumping high enough
-
-                if (player && player.hp > 0 && dist < this.attackRange && !isPlayerTooHigh) {
-                    player.takeDamage(this.damage);
+                const candidates = [this.game.player, this.game.player2].filter((p) => p && p.hp > 0);
+                for (const player of candidates) {
+                    const dist = Math.abs(player.x - this.x);
+                    const isPlayerTooHigh = player.y < groundY - 60;
+                    if (dist < this.attackRange && !isPlayerTooHigh) {
+                        player.takeDamage(this.damage);
+                        break; // only hit one per attack
+                    }
                 }
             }
 
@@ -143,10 +146,13 @@ export class Enemy {
             this.knockbackX *= 0.9;
         }
 
-        // AI movement
+        // AI movement: target closest alive player
         if (Math.abs(this.knockbackX) < 50) {
-            const player = this.game.player;
-            if (!player || player.hp <= 0) return;
+            const candidates = [this.game.player, this.game.player2].filter((p) => p && p.hp > 0);
+            const player = candidates.length ? candidates.reduce((a, b) =>
+                Math.abs(a.x - this.x) < Math.abs(b.x - this.x) ? a : b
+            ) : null;
+            if (!player) return;
 
             const dist = player.x - this.x;
             this.facingRight = dist > 0;
@@ -174,10 +180,10 @@ export class Enemy {
         this.sprite.setAnimation('attack', false, null, true);
     }
 
-    takeDamage(amount, knockbackDir = 0, knockbackPower = 400) {
+    takeDamage(amount, knockbackDir = 0, knockbackPower = 400, attackerIndex = 0) {
         this.hp -= amount;
+        if (this.hp <= 0) this.killedBy = attackerIndex;
         if (knockbackDir !== 0) {
-            // Apply knockback multiplier based on type
             this.knockbackX = knockbackDir * knockbackPower * this.knockbackMult;
         }
     }

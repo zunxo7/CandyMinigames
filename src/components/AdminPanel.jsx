@@ -1,12 +1,25 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning } from '@phosphor-icons/react';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning, GameController } from '@phosphor-icons/react';
 import { supabase } from '../supabase';
 import ContentEditor from './ContentEditor';
 import AnnouncementManager from './AnnouncementManager';
 import candyIcon from '../assets/Candy Icon.webp';
+import { useGameConfig } from '../context/GameConfigContext';
+import {
+    FLAPPY_CONFIG_SCHEMA,
+    PINATA_CONFIG_SCHEMA,
+    BOBO_CONFIG_SCHEMA,
+    DEFAULT_FLAPPY_CONFIG,
+    DEFAULT_PINATA_CONFIG,
+    DEFAULT_BOBO_CONFIG,
+    FLAPPY_PRESETS,
+    PINATA_PRESETS,
+    BOBO_PRESETS
+} from '../config/gameDefaults';
 
 const AdminPanel = ({ onBack }) => {
-    const [activeTab, setActiveTab] = useState('shop'); // 'shop' | 'announcements' | 'events' | 'users'
+    const [activeTab, setActiveTab] = useState('shop'); // 'shop' | 'announcements' | 'events' | 'games' | 'users'
+    const [gamesSubTab, setGamesSubTab] = useState('flappy'); // 'flappy' | 'pinata' | 'cake'
     const [shopItems, setShopItems] = useState([]);
     const [editingItem, setEditingItem] = useState(null);
     const [showEditor, setShowEditor] = useState(false);
@@ -33,6 +46,10 @@ const AdminPanel = ({ onBack }) => {
     const [editingUsernameValue, setEditingUsernameValue] = useState('');
     const [updatingMode, setUpdatingMode] = useState(false);
     const [updatingModeLoading, setUpdatingModeLoading] = useState(false);
+    const { config: gameConfig, saveConfig, refreshConfig } = useGameConfig();
+    const candyGiftChannelRef = useRef(null);
+    const [gamesConfigDirty, setGamesConfigDirty] = useState({ flappy: {}, pinata: {}, cake: {} });
+    const [gamesSaveStatus, setGamesSaveStatus] = useState(null); // 'saving' | 'saved' | 'error'
 
     const showToast = (message, type = 'success') => {
         setToastMessage({ message, type });
@@ -42,6 +59,19 @@ const AdminPanel = ({ onBack }) => {
     useEffect(() => {
         if (activeTab === 'shop') fetchShopItems();
         if (activeTab === 'users') fetchUsers();
+        if (activeTab === 'games') refreshConfig();
+    }, [activeTab, refreshConfig]);
+
+    // Stay subscribed to candy_gift when on Users tab so we can broadcast when adding candies
+    useEffect(() => {
+        if (activeTab !== 'users') return;
+        const ch = supabase.channel('candy_gift').subscribe((status) => {
+            if (status === 'SUBSCRIBED') candyGiftChannelRef.current = ch;
+        });
+        return () => {
+            supabase.removeChannel(ch);
+            candyGiftChannelRef.current = null;
+        };
     }, [activeTab]);
 
     useEffect(() => {
@@ -267,6 +297,20 @@ const AdminPanel = ({ onBack }) => {
             }
         }
 
+        // Notify the user with a full-screen overlay (Realtime broadcast on shared channel)
+        const ch = candyGiftChannelRef.current;
+        if (ch) {
+            ch.send({ type: 'broadcast', event: 'candies_added', payload: { targetUserId: userId, amount } });
+        } else {
+            const newCh = supabase.channel('candy_gift');
+            newCh.subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    newCh.send({ type: 'broadcast', event: 'candies_added', payload: { targetUserId: userId, amount } });
+                    setTimeout(() => supabase.removeChannel(newCh), 500);
+                }
+            });
+        }
+
         setCandyUpdate({ userId: null, amount: '' });
         fetchUsers();
     };
@@ -322,6 +366,23 @@ const AdminPanel = ({ onBack }) => {
             .update({ username: value })
             .eq('id', editingUsernameId);
         if (!error) {
+            const apiBase = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+                try {
+                    const r = await fetch(`${apiBase}/api/admin/update-auth-email`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                        body: JSON.stringify({ userId: editingUsernameId, newUsername: value })
+                    });
+                    const data = await r.json().catch(() => ({}));
+                    if (!r.ok) {
+                        showToast(data?.error || 'Auth email sync failed', 'error');
+                    }
+                } catch (e) {
+                    showToast('Auth email sync failed', 'error');
+                }
+            }
             setUsers((prev) => prev.map((u) => (u.id === editingUsernameId ? { ...u, username: value } : u)));
             showToast('Username updated');
         } else {
@@ -544,6 +605,13 @@ const AdminPanel = ({ onBack }) => {
                         <span>Events</span>
                     </button>
                     <button
+                        className={`admin-tab ${activeTab === 'games' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('games')}
+                    >
+                        <GameController size={20} weight="fill" />
+                        <span>Games</span>
+                    </button>
+                    <button
                         className={`admin-tab ${activeTab === 'users' ? 'active' : ''}`}
                         onClick={() => setActiveTab('users')}
                     >
@@ -555,36 +623,6 @@ const AdminPanel = ({ onBack }) => {
 
             {/* Content */}
             <div className="admin-content">
-                {/* Updating overlay control */}
-                <div className="admin-updating-card">
-                    <div className="admin-updating-status">
-                        <span className="admin-updating-label">Updating overlay:</span>
-                        <span className={`admin-updating-badge ${updatingMode ? 'on' : 'off'}`}>
-                            {updatingMode ? 'ON' : 'OFF'}
-                        </span>
-                    </div>
-                    {!updatingMode ? (
-                        <button
-                            type="button"
-                            className="admin-updating-btn"
-                            onClick={handleEnableUpdatingMode}
-                            disabled={updatingModeLoading}
-                        >
-                            <Warning size={18} weight="fill" />
-                            <span>Enable Updating mode</span>
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            className="admin-updating-btn admin-updating-btn-off"
-                            onClick={handleDisableUpdatingMode}
-                            disabled={updatingModeLoading}
-                        >
-                            <span>Disable Updating mode</span>
-                        </button>
-                    )}
-                </div>
-
                 {activeTab === 'shop' && (
                     <div className="shop-management">
                         <div className="admin-section-header">
@@ -701,22 +739,172 @@ const AdminPanel = ({ onBack }) => {
                 )}
 
                 {activeTab === 'announcements' && (
-                    <AnnouncementManager />
+                    <>
+                        <div className="admin-updating-card">
+                            <div className="admin-updating-status">
+                                <span className="admin-updating-label">Updating Overlay</span>
+                                <span className={`admin-updating-badge ${updatingMode ? 'on' : 'off'}`}>
+                                    {updatingMode ? 'ON' : 'OFF'}
+                                </span>
+                            </div>
+                            {!updatingMode ? (
+                                <button
+                                    type="button"
+                                    className="admin-updating-btn"
+                                    onClick={handleEnableUpdatingMode}
+                                    disabled={updatingModeLoading}
+                                >
+                                    <Warning size={18} weight="fill" />
+                                    <span>Enable</span>
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="admin-updating-btn admin-updating-btn-off"
+                                    onClick={handleDisableUpdatingMode}
+                                    disabled={updatingModeLoading}
+                                >
+                                    <span>Disable</span>
+                                </button>
+                            )}
+                        </div>
+                        <AnnouncementManager />
+                    </>
+                )}
+
+                {activeTab === 'games' && (
+                    <div className="games-config-panel">
+                        <div className="admin-section-header">
+                            <div className="admin-section-header-content">
+                                <h2>Game Variables</h2>
+                                <p>Tweak difficulty and timing for each game. Changes apply to new games (real-time save).</p>
+                            </div>
+                        </div>
+                        <div className="games-sub-tabs">
+                            {[
+                                { id: 'flappy', label: 'Flappy Frosti' },
+                                { id: 'pinata', label: 'Crumb Clash' },
+                                { id: 'cake', label: 'Bobo Catch' }
+                            ].map(({ id, label }) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    className={`games-sub-tab ${gamesSubTab === id ? 'active' : ''}`}
+                                    onClick={() => setGamesSubTab(id)}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        {(() => {
+                            const schema = gamesSubTab === 'flappy' ? FLAPPY_CONFIG_SCHEMA : gamesSubTab === 'pinata' ? PINATA_CONFIG_SCHEMA : BOBO_CONFIG_SCHEMA;
+                            const base = gameConfig[gamesSubTab] || (gamesSubTab === 'flappy' ? DEFAULT_FLAPPY_CONFIG : gamesSubTab === 'pinata' ? DEFAULT_PINATA_CONFIG : DEFAULT_BOBO_CONFIG);
+                            const dirty = gamesConfigDirty[gamesSubTab] || {};
+                            const getVal = (key) => (dirty[key] !== undefined ? dirty[key] : base[key]);
+                            const setVal = (key, value) => setGamesConfigDirty(prev => ({
+                                ...prev,
+                                [gamesSubTab]: { ...(prev[gamesSubTab] || {}), [key]: value }
+                            }));
+                            const currentConfig = { ...base };
+                            schema.forEach(({ key }) => {
+                                const d = dirty[key];
+                                if (d !== undefined && d !== '') {
+                                    currentConfig[key] = typeof base[key] === 'number' ? Number(d) : d;
+                                }
+                            });
+                            const presets = gamesSubTab === 'flappy' ? FLAPPY_PRESETS : gamesSubTab === 'pinata' ? PINATA_PRESETS : BOBO_PRESETS;
+                            const applyPreset = (presetKey) => {
+                                const preset = presets[presetKey];
+                                if (!preset) return;
+                                setGamesConfigDirty(prev => ({ ...prev, [gamesSubTab]: { ...preset } }));
+                            };
+                            const handleSave = async () => {
+                                setGamesSaveStatus('saving');
+                                const toSave = { ...base };
+                                schema.forEach(({ key }) => {
+                                    const d = dirty[key];
+                                    if (d !== undefined && d !== '') toSave[key] = typeof base[key] === 'number' ? Number(d) : d;
+                                });
+                                const ok = await saveConfig(gamesSubTab, toSave);
+                                setGamesSaveStatus(ok ? 'saved' : 'error');
+                                if (ok) setGamesConfigDirty(prev => ({ ...prev, [gamesSubTab]: {} }));
+                                setTimeout(() => setGamesSaveStatus(null), 2000);
+                            };
+                            return (
+                                <div className="games-config-form">
+                                    <div className="games-config-presets">
+                                        <span className="games-config-presets-label">Preset:</span>
+                                        {['easy', 'medium', 'hard'].map((key) => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                className={`games-config-preset-btn preset-${key}`}
+                                                onClick={() => applyPreset(key)}
+                                            >
+                                                {key.charAt(0).toUpperCase() + key.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="games-config-grid">
+                                        {schema.map(({ key, label, type, min, max, step }) => (
+                                            <div key={key} className="games-config-field">
+                                                <label htmlFor={`game-${gamesSubTab}-${key}`}>{label}</label>
+                                                <input
+                                                    id={`game-${gamesSubTab}-${key}`}
+                                                    type={type}
+                                                    min={min}
+                                                    max={max}
+                                                    step={step}
+                                                    value={getVal(key)}
+                                                    onChange={(e) => setVal(key, type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="games-config-actions">
+                                        <button
+                                            type="button"
+                                            className="admin-btn admin-btn-primary"
+                                            onClick={handleSave}
+                                            disabled={gamesSaveStatus === 'saving' || Object.keys(dirty).length === 0}
+                                        >
+                                            {gamesSaveStatus === 'saving' ? 'Saving…' : gamesSaveStatus === 'saved' ? 'Saved' : 'Save changes'}
+                                        </button>
+                                        {Object.keys(dirty).length > 0 && (
+                                            <button
+                                                type="button"
+                                                className="admin-btn"
+                                                onClick={() => setGamesConfigDirty(prev => ({ ...prev, [gamesSubTab]: {} }))}
+                                            >
+                                                Reset unsaved
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </div>
                 )}
 
                 {activeTab === 'events' && (
                     <div className="events-panel">
                         <div className="admin-section-header">
                             <div className="admin-section-header-content">
-<h2>Events</h2>
-                            <p>Deploy visual particles and immersive events to all active players</p>
+                                <h2>Events</h2>
+                                <p>Deploy visual effects and candy boosts to all active players</p>
                             </div>
                         </div>
-                        <div className="admin-grid-layout">
-                            <div className="admin-card event-card">
+
+                        <div className="events-panel-body">
+                        <div className="events-group-header-card">
+                            <h3 className="events-group-title">Visual</h3>
+                            <p className="events-group-desc">Screen effects only — no gameplay impact</p>
+                        </div>
+                        <div className="admin-grid-layout events-group">
+                            <div className="admin-card event-card event-card-confetti">
                                 <div className="admin-card-header-left">
-                                    <div className="admin-card-icon icon-bg-yellow black-border">
-                                        <Confetti size={32} weight="fill" color="#ffd93d" />
+                                    <div className="admin-card-icon icon-bg-pink">
+                                        <Confetti size={32} weight="fill" color="#ff6b9d" />
                                     </div>
                                     <div>
                                         <h3 className="admin-card-title">Confetti Party</h3>
@@ -726,16 +914,12 @@ const AdminPanel = ({ onBack }) => {
                                 <p className="admin-card-description">
                                     Triggers a massive confetti explosion on everyone's screen.
                                 </p>
-                                <button className="trigger-btn btn-yellow" onClick={() => triggerEffect('confetti')}>
+                                <button className="trigger-btn" onClick={() => triggerEffect('confetti')}>
                                     Trigger Rain
                                 </button>
-                                <div className="event-candy-badge" title="Candy reward">
-                                    <img src={candyIcon} alt="" className="event-candy-icon" />
-                                    <span>×{EVENT_CANDY.confetti}</span>
-                                </div>
                             </div>
 
-                            <div className="admin-card event-card">
+                            <div className="admin-card event-card event-card-hearts">
                                 <div className="admin-card-header-left">
                                     <div className="admin-card-icon icon-bg-pink">
                                         <Heart size={32} weight="fill" color="#ff6b9d" />
@@ -751,16 +935,12 @@ const AdminPanel = ({ onBack }) => {
                                 <button className="trigger-btn" onClick={() => triggerEffect('hearts')}>
                                     Spread Love
                                 </button>
-                                <div className="event-candy-badge" title="Candy reward">
-                                    <img src={candyIcon} alt="" className="event-candy-icon" />
-                                    <span>×{EVENT_CANDY.hearts}</span>
-                                </div>
                             </div>
 
-                            <div className="admin-card event-card">
+                            <div className="admin-card event-card event-card-birthday">
                                 <div className="admin-card-header-left">
                                     <div className="admin-card-icon icon-bg-red">
-                                        <Cake size={32} weight="fill" color="#ff9ec4" />
+                                        <Cake size={32} weight="fill" color="#ff6b9d" />
                                     </div>
                                     <div>
                                         <h3 className="admin-card-title">Birthday Wish</h3>
@@ -783,35 +963,26 @@ const AdminPanel = ({ onBack }) => {
                                         Go!
                                     </button>
                                 </div>
-                                <div className="event-candy-badge" title="Candy reward">
-                                    <img src={candyIcon} alt="" className="event-candy-icon" />
-                                    <span>×{EVENT_CANDY.birthday}</span>
-                                </div>
                             </div>
+                        </div>
 
-                            <div className="admin-card event-card">
-                                <div className="admin-card-header-left">
-                                    <div className="admin-card-icon icon-bg-yellow black-border">
-                                        <img src={candyIcon} alt="" style={{ width: 28, height: 28, objectFit: 'contain' }} />
-                                    </div>
-                                    <div>
-                                        <h3 className="admin-card-title">Candy Multiplier</h3>
-                                        <span className="admin-card-subtitle">2× or 3× candy for all players</span>
-                                    </div>
-                                </div>
-                                <p className="admin-card-description">
-                                    All players earn multiplied candy for the duration. Shows on every screen with a countdown.
-                                </p>
+                        <div className="events-group-header-card">
+                            <h3 className="events-group-title">Candy Multiplier</h3>
+                            <p className="events-group-desc">In-game boost — all players earn more candy for the duration</p>
+                        </div>
+                        <div className="admin-grid-layout events-group">
+                            <div className="admin-card event-card event-card-actual">
                                 <div className="effect-inputs">
-                                    <label className="effect-label">Multiplier</label>
-                                    <select
+                                    <label className="effect-label">Multiplier (×)</label>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={20}
+                                        step={0.5}
                                         value={candyMultiplierValue}
-                                        onChange={(e) => setCandyMultiplierValue(Number(e.target.value))}
-                                        className="effect-select"
-                                    >
-                                        <option value={2}>2×</option>
-                                        <option value={3}>3×</option>
-                                    </select>
+                                        onChange={(e) => setCandyMultiplierValue(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+                                        className="birthday-input"
+                                    />
                                     <label className="effect-label">Duration (minutes)</label>
                                     <input
                                         type="number"
@@ -828,10 +999,11 @@ const AdminPanel = ({ onBack }) => {
                                             durationSeconds: candyMultiplierDuration * 60
                                         })}
                                     >
-                                        Start ×{candyMultiplierValue} for {candyMultiplierDuration} min
+                                        Start
                                     </button>
                                 </div>
                             </div>
+                        </div>
                         </div>
                     </div>
                 )}

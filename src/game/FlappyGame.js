@@ -12,14 +12,22 @@ function getFlappyScale(width) {
 }
 
 export class FlappyGame extends Game {
-    constructor(canvas, onGameOver, onCurrencyUpdate) {
+    constructor(canvas, onGameOver, onCurrencyUpdate, config = {}) {
         super(canvas, onGameOver);
         this.onCurrencyUpdate = onCurrencyUpdate;
 
-        this.pipeWidthBase = 100;
-        this.pipeGapBase = 250;
-        this.speedBase = 300;
+        this.pipeWidthBase = config.pipeWidthBase ?? 100;
+        this.pipeGapBase = config.pipeGapBase ?? 250;
+        this.speedBase = config.speedBase ?? 300;
         this.playerWidthBase = 73.5;
+        this.candiesPerPipe = config.candiesPerPipe ?? 3;
+        this.bonusPipeInterval = config.bonusPipeInterval ?? 3;
+        this.bonusPipeCandies = config.bonusPipeCandies ?? 5;
+        this.medkitGuaranteedPipe = config.medkitGuaranteedPipe ?? 3;
+        this.medkitSpawnEveryNPipes = config.medkitSpawnEveryNPipes ?? 3;
+        this.medkitSpawnChance = config.medkitSpawnChance ?? 0.5;
+        this.medkitBaseSize = 36;
+        this.medkitSizeMultiplier = config.medkitSizeMultiplier ?? 1.1;
 
         this.player = {
             x: 100,
@@ -27,26 +35,27 @@ export class FlappyGame extends Game {
             width: 73.5,
             height: 73.5,
             velocity: 0,
-            gravity: 0.15,
-            jump: -5.2,
+            gravity: config.gravity ?? 0.15,
+            jump: config.jump ?? -5.2,
             rotation: 0,
             frame: 0,
             frameTimer: 0
         };
 
-        this.lives = 2;
-        this.maxLives = 2;
+        this.lives = config.maxLives ?? 2;
+        this.maxLives = config.maxLives ?? 2;
         this.invincibleUntil = 0;
 
         this.isGameStarted = false;
 
         this.pipes = [];
         this.medkits = [];
+        this.pipesSpawnedCount = 0;
         this.pipeTimer = 0;
-        this.pipeInterval = 2.0;
-        this.pipeWidth = 100;
-        this.pipeGap = 250;
-        this.speed = 300;
+        this.pipeInterval = config.pipeInterval ?? 2.0;
+        this.pipeWidth = this.pipeWidthBase;
+        this.pipeGap = this.pipeGapBase;
+        this.speed = this.speedBase;
 
         this.notifications = [];
         this.nextNotificationId = 0;
@@ -133,13 +142,14 @@ export class FlappyGame extends Game {
             this.pipes.forEach((pipe) => {
                 pipe.x -= this.speed * dt;
 
-                // Score check
+                // Score check: candies per pipe from config; bonus pipe gives bonusPipeCandies
                 if (!pipe.passed && pipe.x + this.pipeWidth < this.player.x) {
                     pipe.passed = true;
-                    this.score++;
-                    this.currency++;
+                    const candies = pipe.bonus ? this.bonusPipeCandies : this.candiesPerPipe;
+                    this.score += candies;
+                    this.currency += candies;
                     if (this.onCurrencyUpdate) this.onCurrencyUpdate(this.currency);
-                    this.addNotification("+1 Candy!", "flappyCandy");
+                    this.addNotification(pipe.bonus ? `+${this.bonusPipeCandies} Candy!` : `+${this.candiesPerPipe} Candy!`, "flappyCandy");
                 }
 
                 // Collision check (skip if invincible)
@@ -158,7 +168,8 @@ export class FlappyGame extends Game {
             const toRemove = [];
             this.medkits.forEach((m) => {
                 m.x -= this.speed * dt;
-                if (m.x + 30 < 0) toRemove.push(m);
+                const mSize = m.size || Math.round(this.medkitBaseSize * this.medkitSizeMultiplier);
+                if (m.x + mSize / 2 < 0) toRemove.push(m);
                 else if (this.checkMedkitCollision(this.player, m)) {
                     this.lives = Math.min(this.maxLives, this.lives + 1);
                     toRemove.push(m);
@@ -183,20 +194,32 @@ export class FlappyGame extends Game {
         const maxPipeHeight = this.height - this.pipeGap - minPipeHeight;
         const topPipeHeight = Math.random() * (maxPipeHeight - minPipeHeight) + minPipeHeight;
 
+        this.pipesSpawnedCount++;
         const pipe = {
             x: this.width,
             topHeight: topPipeHeight,
-            passed: false
+            passed: false,
+            bonus: this.pipesSpawnedCount % this.bonusPipeInterval === 0
         };
         this.pipes.push(pipe);
 
-        // Spawn medkit in gap after 3 pipes (i.e. from 4th pipe onward)
-        if (this.pipes.length >= 4) {
+        // Medkit: guaranteed on pipe N, then chance every N pipes (not on every pipe)
+        const size = Math.round(this.medkitBaseSize * this.medkitSizeMultiplier);
+        if (this.pipesSpawnedCount === this.medkitGuaranteedPipe) {
             this.medkits.push({
                 x: this.width + this.pipeWidth / 2,
                 y: topPipeHeight + this.pipeGap / 2,
-                size: 36
+                size
             });
+        } else if (this.pipesSpawnedCount > this.medkitGuaranteedPipe) {
+            const pipesSinceGuaranteed = this.pipesSpawnedCount - this.medkitGuaranteedPipe;
+            if (pipesSinceGuaranteed % this.medkitSpawnEveryNPipes === 0 && Math.random() < this.medkitSpawnChance) {
+                this.medkits.push({
+                    x: this.width + this.pipeWidth / 2,
+                    y: topPipeHeight + this.pipeGap / 2,
+                    size
+                });
+            }
         }
     }
 
@@ -263,14 +286,20 @@ export class FlappyGame extends Game {
         this.pipes.forEach(pipe => {
             const bottomY = pipe.topHeight + this.pipeGap;
 
-            // Gradient for Blue Candy look
+            // Bonus pipe (every 3rd): gold; normal: blue candy
             const pipeGradient = ctx.createLinearGradient(pipe.x, 0, pipe.x + this.pipeWidth, 0);
-            pipeGradient.addColorStop(0, '#4facfe'); // Deep Pastel Blue
-            pipeGradient.addColorStop(0.5, '#ffffff'); // White Core
-            pipeGradient.addColorStop(1, '#4facfe'); // Deep Pastel Blue
+            if (pipe.bonus) {
+                pipeGradient.addColorStop(0, '#f9d423');
+                pipeGradient.addColorStop(0.5, '#fff9e6');
+                pipeGradient.addColorStop(1, '#f9d423');
+            } else {
+                pipeGradient.addColorStop(0, '#4facfe');
+                pipeGradient.addColorStop(0.5, '#ffffff');
+                pipeGradient.addColorStop(1, '#4facfe');
+            }
 
             ctx.fillStyle = pipeGradient;
-            ctx.strokeStyle = '#000000'; // Pure black outline for contrast
+            ctx.strokeStyle = '#000000';
             ctx.lineWidth = 5;
 
             // 1. Draw Pipe Bodies First
@@ -286,7 +315,7 @@ export class FlappyGame extends Game {
             ctx.rect(pipe.x, bottomY, this.pipeWidth, this.height - bottomY);
             ctx.clip();
 
-            ctx.strokeStyle = '#4facfe';
+            ctx.strokeStyle = pipe.bonus ? '#e6b422' : '#4facfe';
             ctx.lineWidth = 12;
             for (let y = -this.height; y < this.height * 2; y += 35) {
                 ctx.beginPath();
@@ -310,9 +339,9 @@ export class FlappyGame extends Game {
             ctx.strokeRect(pipe.x - 10, bottomY, this.pipeWidth + 20, 25);
         });
 
-        // Draw Medkits
-        const medkitSize = 36;
+        // Draw Medkits (size per medkit for 10% bigger etc.)
         this.medkits.forEach((m) => {
+            const medkitSize = m.size || Math.round(this.medkitBaseSize * this.medkitSizeMultiplier);
             if (this.assets.medkit) {
                 ctx.drawImage(
                     this.assets.medkit,

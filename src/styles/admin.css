@@ -709,6 +709,64 @@
     position: relative;
 }
 
+/* Event card: black outline; icons use darker version of their inner color */
+.event-card-confetti .admin-card-icon {
+    border-color: #d84d7a;
+}
+.event-card-hearts .admin-card-icon {
+    border-color: #d84d7a;
+}
+.event-card-birthday .admin-card-icon {
+    border-color: #d84d7a;
+}
+
+.events-panel-body {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+.events-group-header-card {
+    display: inline-block;
+    background: #fff;
+    border: 3px solid #2d2d2d;
+    border-radius: 14px;
+    padding: 0.75rem 0.75rem 1rem 0.75rem;
+    margin-bottom: 0.75rem;
+}
+.events-group-header-card .events-group-title {
+    margin-top: 0 !important;
+    margin-bottom: 0.2rem;
+}
+.events-group-header-card .events-group-desc {
+    margin: 0;
+}
+
+.events-group-title {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #2d2d2d;
+    margin: 1.5rem 0 0.25rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.events-group-title:first-of-type {
+    margin-top: 0.5rem;
+}
+.events-group-desc {
+    font-size: 0.85rem;
+    color: #666;
+    margin: 0 0 0.75rem 0;
+}
+.events-group {
+    margin-bottom: 0.5rem;
+}
+/* Same gap as between Events header and Visual: between Visual cards and Candy Multiplier header */
+.events-group + .events-group-header-card {
+    margin-top: 1rem;
+}
+.event-card-actual {
+    border-color: #000;
+}
+
 .event-candy-badge {
     position: absolute;
     bottom: 1rem;
@@ -820,6 +878,12 @@
     gap: 1rem;
 }
 
+.user-info > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
 .user-username {
     font-size: 1.2rem;
     font-weight: 800;
@@ -901,14 +965,18 @@
 .add-candy-btn {
     padding: 0 1.5rem;
     border-radius: 12px;
-    border: 2px solid var(--border-dark);
-    background: #ffd93d;
+    border: 2px solid #2d2d2d;
+    background: #ff6b9d;
+    color: #fff;
     font-weight: 800;
     cursor: pointer;
     font-family: var(--font-main);
     transition: opacity 0.2s;
 }
 
+.add-candy-btn:hover:not(:disabled) {
+    background: #ff5289;
+}
 .add-candy-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -1149,4 +1217,115 @@
 
 .max-w-200 {
     max-width: 200px;
+}
+
+/* ===== GAMES CONFIG (Admin) ===== */
+.games-config-panel {
+    margin-top: 1rem;
+}
+.games-sub-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+.games-sub-tab {
+    padding: 0.6rem 1.2rem;
+    border: 3px solid #2d2d2d;
+    border-radius: 12px;
+    background: white;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.games-sub-tab:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+.games-sub-tab.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: #000;
+}
+.games-config-form {
+    background: white;
+    border: 3px solid #2d2d2d;
+    border-radius: 16px;
+    padding: 1.5rem;
+}
+.games-config-presets {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+.games-config-presets-label {
+    font-weight: 700;
+    color: #2d2d2d;
+    font-size: 0.95rem;
+}
+.games-config-preset-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #2d2d2d;
+    border-radius: 10px;
+    background: white;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.games-config-preset-btn:hover {
+    filter: brightness(0.95);
+}
+.games-config-preset-btn.preset-easy {
+    background: #86efac;
+    color: #14532d;
+}
+.games-config-preset-btn.preset-medium {
+    background: #fde047;
+    color: #713f12;
+}
+.games-config-preset-btn.preset-hard {
+    background: #fca5a5;
+    color: #7f1d1d;
+}
+.games-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+.games-config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.games-config-field label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #555;
+}
+.games-config-field input {
+    padding: 0.5rem 0.6rem;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    font-size: 0.95rem;
+}
+.games-config-field input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+.games-config-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.games-config-actions .admin-btn-primary {
+    background: var(--color-primary);
+    color: white;
+    border: 2px solid #2d2d2d;
+}
+.games-config-actions .admin-btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }

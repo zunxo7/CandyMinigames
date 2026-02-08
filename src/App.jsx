@@ -9,19 +9,40 @@ import GameCanvas from './components/GameCanvas';
 import Shop from './components/Shop';
 import Leaderboard from './components/Leaderboard';
 import AdminPanel from './components/AdminPanel';
+import Multiplayer from './components/Multiplayer';
 import Settings from './components/Settings';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import GlobalEffects from './components/GlobalEffects';
 import UpdatingOverlay from './components/UpdatingOverlay';
+import CandyGiftOverlay from './components/CandyGiftOverlay';
 import { CandyMultiplierProvider, CandyMultiplierBadge } from './context/CandyMultiplierContext';
+import { GameConfigProvider } from './context/GameConfigContext';
 
 const AppContent = () => {
-  const { user, profile, loading, signOut } = useAuth();
-  const [screen, setScreen] = useState('menu'); // 'menu' | 'games' | 'play' | 'shop' | 'leaderboard' | 'settings' | 'panel'
+  const { user, profile, loading, signOut, fetchProfile } = useAuth();
+  const [screen, setScreen] = useState('menu'); // 'menu' | 'games' | 'play' | 'shop' | 'leaderboard' | 'settings' | 'panel' | 'multiplayer'
+  const [playRoomId, setPlayRoomId] = useState(null);
+  const [playIsHost, setPlayIsHost] = useState(false);
   const [gameType, setGameType] = useState('pinata');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [candyGift, setCandyGift] = useState(null); // { amount } when admin added candies
 
-  // Fetch "updating" flag from DB (when authenticated); re-check on visibility so admin can clear it
+  // Subscribe to candy-gift broadcast (admin added candies to this user) — shared channel, filter by targetUserId
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel('candy_gift')
+      .on('broadcast', { event: 'candies_added' }, (msg) => {
+        const data = msg?.payload ?? msg;
+        const target = data?.targetUserId ?? data?.userId;
+        const amount = data?.amount;
+        if (target === user.id && amount != null) setCandyGift({ amount: Number(amount) });
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [user?.id]);
+
+  // "Updating" flag: initial fetch + Realtime so overlay appears/disappears instantly when admin toggles
   useEffect(() => {
     if (!user) {
       setIsUpdating(false);
@@ -32,12 +53,20 @@ const AppContent = () => {
       setIsUpdating(data?.value === 'true' || data?.value === '1');
     };
     fetchUpdating();
-    const onVis = () => fetchUpdating();
-    document.addEventListener('visibilitychange', onVis);
-    const interval = setInterval(fetchUpdating, 20000);
+
+    const channel = supabase
+      .channel('app_settings_updating')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+        const row = payload.new || payload.old;
+        if (row?.key === 'updating') {
+          const val = payload.new?.value ?? row.value;
+          setIsUpdating(val === 'true' || val === '1');
+        }
+      })
+      .subscribe();
+
     return () => {
-      document.removeEventListener('visibilitychange', onVis);
-      clearInterval(interval);
+      supabase.removeChannel(channel);
     };
   }, [user]);
 
@@ -81,6 +110,7 @@ const AppContent = () => {
 
   // Main app screens
   return (
+    <GameConfigProvider>
     <CandyMultiplierProvider>
       <div className="app-container">
         {/* Global announcement banner */}
@@ -91,13 +121,37 @@ const AppContent = () => {
         {/* Updating overlay: blocks all interaction when DB app_settings.updating = true (hidden for admin so they can turn it off from Panel) */}
         {isUpdating && profile?.username?.toLowerCase() !== 'admin' && <UpdatingOverlay />}
 
+        {/* Candy gift overlay: shown when admin adds candies to this user */}
+        {candyGift && profile?.username?.toLowerCase() !== 'admin' && (
+          <CandyGiftOverlay
+            amount={candyGift.amount}
+            onDismiss={() => {
+              if (user?.id) fetchProfile(user.id);
+              setCandyGift(null);
+            }}
+            autoDismissMs={5000}
+          />
+        )}
+
       {screen === 'menu' && (
         <MainMenu
           onPlay={() => setScreen('games')}
+          onMultiplayer={() => setScreen('multiplayer')}
           onShop={() => setScreen('shop')}
           onLeaderboard={() => setScreen('leaderboard')}
           onSettings={() => setScreen('settings')}
           onPanel={() => setScreen('panel')}
+        />
+      )}
+      {screen === 'multiplayer' && (
+        <Multiplayer
+          onBack={() => setScreen('menu')}
+          onStartGame={(roomId, isHost, gameType) => {
+            setPlayRoomId(roomId);
+            setPlayIsHost(isHost);
+            setGameType(gameType || 'pinata');
+            setScreen('play');
+          }}
         />
       )}
       {screen === 'games' && (
@@ -112,7 +166,14 @@ const AppContent = () => {
       {screen === 'play' && (
         <GameCanvas
           gameType={gameType}
-          onBack={() => setScreen('games')}
+          onBack={() => {
+            setPlayRoomId(null);
+            setPlayIsHost(false);
+            setScreen(playRoomId ? 'multiplayer' : 'games');
+          }}
+          isUpdating={isUpdating}
+          roomId={playRoomId}
+          isHost={playIsHost}
         />
       )}
       {screen === 'shop' && (
@@ -129,6 +190,7 @@ const AppContent = () => {
       )}
       </div>
     </CandyMultiplierProvider>
+    </GameConfigProvider>
   );
 };
 
