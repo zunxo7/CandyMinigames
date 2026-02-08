@@ -468,15 +468,15 @@
 }
 
 .game-loading-overlay.mode-pinata {
-    background: rgba(255, 182, 210, 0.6);
+    background: rgba(255, 245, 248, 0.95);
 }
 
 .game-loading-overlay.mode-flappy {
-    background: rgba(116, 185, 255, 0.6);
+    background: rgba(235, 248, 255, 0.95);
 }
 
 .game-loading-overlay.mode-cake {
-    background: rgba(139, 69, 19, 0.35);
+    background: rgba(245, 235, 220, 0.95);
 }
 
 .game-loading-content {
@@ -494,11 +494,11 @@
 }
 
 .game-loading-overlay.mode-pinata .game-loading-spinner {
-    border-top-color: #ff6b9d;
+    border-top-color: #e84a7f;
 }
 
 .game-loading-overlay.mode-flappy .game-loading-spinner {
-    border-top-color: #74b9ff;
+    border-top-color: #4facfe;
 }
 
 .game-loading-overlay.mode-cake .game-loading-spinner {
@@ -526,7 +526,7 @@
 }
 
 .tutorial-overlay.mode-pinata {
-    background: rgba(255, 182, 210, 0.5);
+    background: rgba(255, 245, 248, 0.95);
 }
 
 .tutorial-overlay.mode-pinata .tutorial-card {
@@ -539,7 +539,7 @@
 }
 
 .tutorial-overlay.mode-flappy {
-    background: rgba(116, 185, 255, 0.45);
+    background: rgba(235, 248, 255, 0.95);
 }
 
 .tutorial-overlay.mode-flappy .tutorial-card {
@@ -548,11 +548,11 @@
 }
 
 .tutorial-overlay.mode-flappy .tutorial-start-btn {
-    background: #74b9ff;
+    background: #4facfe;
 }
 
 .tutorial-overlay.mode-cake {
-    background: rgba(139, 69, 19, 0.3);
+    background: rgba(245, 235, 220, 0.95);
 }
 
 .tutorial-overlay.mode-cake .tutorial-card {
