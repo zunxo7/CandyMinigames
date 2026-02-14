@@ -1,4 +1,27 @@
 :root {
+    /* Breakpoints (for reference in media queries) */
+    --bp-phone-portrait: 480px;   /* Flappy preferred */
+    --bp-phone-landscape: 896px;  /* Bobo, Pinata landscape */
+    --bp-tablet: 768px;
+    --bp-laptop: 1024px;
+    --bp-macbook: 1280px;
+    --bp-laptop-lg: 1440px;
+    --bp-desktop: 1920px;
+
+    /* Responsive sizes (use in clamp or as fallbacks) */
+    --space-xs: clamp(0.25rem, 1vw, 0.5rem);
+    --space-sm: clamp(0.5rem, 2vw, 1rem);
+    --space-md: clamp(1rem, 4vw, 1.5rem);
+    --space-lg: clamp(1.25rem, 5vw, 2rem);
+    --space-xl: clamp(1.5rem, 6vw, 2.5rem);
+    --text-sm: clamp(0.8rem, 2vw, 0.9rem);
+    --text-base: clamp(0.9rem, 2.5vw, 1rem);
+    --text-lg: clamp(1rem, 3vw, 1.25rem);
+    --text-xl: clamp(1.15rem, 4vw, 1.5rem);
+    --text-2xl: clamp(1.5rem, 5vw, 2rem);
+    --text-3xl: clamp(1.75rem, 6vw, 2.5rem);
+    --text-4xl: clamp(2rem, 8vw, 4rem);
+
     /* Pink & White Color Palette */
     --color-primary: #ff6b9d;
     --color-primary-dark: #e84a7f;

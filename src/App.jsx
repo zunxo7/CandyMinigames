@@ -15,7 +15,9 @@ import Settings from './components/Settings';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import GlobalEffects from './components/GlobalEffects';
 import UpdatingOverlay from './components/UpdatingOverlay';
+import ServerLoadingOverlay from './components/ServerLoadingOverlay';
 import CandyGiftOverlay from './components/CandyGiftOverlay';
+import { pingServer } from './socket';
 import { CandyMultiplierProvider, CandyMultiplierBadge } from './context/CandyMultiplierContext';
 import { GameConfigProvider } from './context/GameConfigContext';
 
@@ -27,6 +29,27 @@ const AppContent = () => {
   const [gameType, setGameType] = useState('pinata');
   const [isUpdating, setIsUpdating] = useState(false);
   const [candyGift, setCandyGift] = useState(null); // { amount } when admin added candies
+  const [serverOk, setServerOk] = useState(null); // null = checking, true = ok, false = unreachable
+
+  // Ping game server on start; if unreachable show loading overlay and retry
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      const ok = await pingServer(8000);
+      if (!cancelled) setServerOk(ok);
+      return ok;
+    };
+    check();
+    const retryId = setInterval(async () => {
+      if (cancelled) return;
+      const ok = await check();
+      if (ok) clearInterval(retryId);
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(retryId);
+    };
+  }, []);
 
   // Subscribe to candy-gift broadcast (admin added candies to this user) — shared channel, filter by targetUserId
   useEffect(() => {
@@ -121,6 +144,8 @@ const AppContent = () => {
         <GlobalEffects />
         <CandyMultiplierBadge />
 
+        {/* Server loading: only when in multiplayer flow and server not ready yet (background ping at start) */}
+        {(screen === 'multiplayer' || (screen === 'play' && playRoomId)) && serverOk !== true && <ServerLoadingOverlay />}
         {/* Updating overlay: blocks all interaction when DB app_settings.updating = true (hidden for admin so they can turn it off from Panel) */}
         {isUpdating && profile?.username?.toLowerCase() !== 'admin' && <UpdatingOverlay />}
 

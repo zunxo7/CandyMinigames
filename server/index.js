@@ -159,6 +159,14 @@ io.on('connection', (socket) => {
     socket.currentRoom = roomId;
   });
 
+  socket.on('webrtc_request_offer', () => {
+    if (socket.currentRoom) socket.to(socket.currentRoom).emit('webrtc_request_offer');
+  });
+
+  socket.on('webrtc_signal', (data) => {
+    if (socket.currentRoom) socket.to(socket.currentRoom).emit('webrtc_signal', data);
+  });
+
   socket.on('state', (data) => {
     if (socket.currentRoom) io.to(socket.currentRoom).emit('state', data);
   });

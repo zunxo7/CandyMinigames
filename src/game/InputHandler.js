@@ -2,6 +2,7 @@ export class InputHandler {
     constructor() {
         this.keys = new Set();
         this.mouse = { x: 0, y: 0, clicked: false, down: false };
+        this.virtualKeys = { left: false, right: false, jump: false };
 
         this.onKeyDown = (e) => this.keys.add(e.key.toLowerCase());
         this.onKeyUp = (e) => this.keys.delete(e.key.toLowerCase());
@@ -21,6 +22,9 @@ export class InputHandler {
         this.onBlur = () => {
             this.keys.clear();
             this.mouse.down = false;
+            this.virtualKeys.left = false;
+            this.virtualKeys.right = false;
+            this.virtualKeys.jump = false;
         };
 
         window.addEventListener('keydown', this.onKeyDown);
@@ -31,7 +35,15 @@ export class InputHandler {
     }
 
     isDown(key) {
-        return this.keys.has(key.toLowerCase());
+        const k = key.toLowerCase();
+        if (k === 'a' || k === 'arrowleft') return this.keys.has(k) || this.virtualKeys.left;
+        if (k === 'd' || k === 'arrowright') return this.keys.has(k) || this.virtualKeys.right;
+        if (k === 'w' || k === 'arrowup' || k === ' ') return this.keys.has(k) || this.virtualKeys.jump;
+        return this.keys.has(k);
+    }
+
+    setVirtualKey(name, value) {
+        if (this.virtualKeys[name] !== undefined) this.virtualKeys[name] = !!value;
     }
 
     getMouse() {
@@ -47,6 +59,9 @@ export class InputHandler {
         this.keys.clear();
         this.mouse.down = false;
         this.mouse.clicked = false;
+        this.virtualKeys.left = false;
+        this.virtualKeys.right = false;
+        this.virtualKeys.jump = false;
 
         window.removeEventListener('keydown', this.onKeyDown);
         window.removeEventListener('keyup', this.onKeyUp);

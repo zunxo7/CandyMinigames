@@ -1,6 +1,7 @@
 /**
  * Thin renderer for co-op peer mode. Draws from serialized state (no simulation).
  */
+import { getViewportSize } from './Constants';
 import crumbUrl from '../assets/Crumb.webp';
 import enemyUrl from '../assets/Evil Pinata.webp';
 import medkitUrl from '../assets/Medkit.webp';
@@ -39,10 +40,7 @@ export class PinataGameRenderer {
     }
 
     _syncSizeFromCanvas() {
-        const viewportW = typeof document !== 'undefined' ? document.documentElement.clientWidth : window.innerWidth;
-        const viewportH = typeof document !== 'undefined' ? document.documentElement.clientHeight : window.innerHeight;
-        const maxW = Math.max(300, viewportW);
-        const maxH = Math.max(200, viewportH);
+        const { width: maxW, height: maxH } = getViewportSize();
         const cw = this.canvas?.clientWidth || 0;
         const ch = this.canvas?.clientHeight || 0;
         const w = cw > 0 ? Math.min(cw, maxW) : maxW;
@@ -179,8 +177,7 @@ export class PinataGameRenderer {
         if (!this.ctx) return;
         const useHostSpace = state?.width != null && state?.height != null;
         if (useHostSpace) {
-            const viewportW = document.documentElement?.clientWidth ?? window.innerWidth ?? 800;
-            const viewportH = document.documentElement?.clientHeight ?? window.innerHeight ?? 600;
+            const { width: viewportW, height: viewportH } = getViewportSize();
             const parent = this.canvas?.parentElement;
             const cw = parent?.clientWidth || this.canvas?.clientWidth || 0;
             const ch = parent?.clientHeight || this.canvas?.clientHeight || 0;

@@ -1,5 +1,18 @@
 export const CANVAS_WIDTH = 1376;
 export const CANVAS_HEIGHT = 768;
+
+/** Cap viewport for game canvas on large screens (e.g. desktop) so layout stays consistent */
+export const VIEWPORT_MAX_WIDTH = 1920;
+export const VIEWPORT_MAX_HEIGHT = 1080;
+
+export function getViewportSize() {
+    const w = typeof window !== 'undefined' ? window.innerWidth : 800;
+    const h = typeof window !== 'undefined' ? window.innerHeight : 600;
+    return {
+        width: Math.max(300, Math.min(w, VIEWPORT_MAX_WIDTH)),
+        height: Math.max(200, Math.min(h, VIEWPORT_MAX_HEIGHT))
+    };
+}
 export const GROUND_Y = 265; // User said "floor being at 265 height and then the sky starts". usually this means from bottom or top? 
 // "floor like being at 265 height and then the sky starts". 
 // If generic platformer, usually Y increases downwards. 

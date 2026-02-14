@@ -1,0 +1,10 @@
+# Railway config: deploy the Socket.io server (server/) for multiplayer.
+# See RAILWAY.md for setup steps.
+
+[build]
+buildCommand = "cd server && npm install"
+
+[deploy]
+startCommand = "cd server && node index.js"
+healthcheckPath = "/"
+healthcheckTimeout = 30

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Heart, Lightning, Pause, Skull, Trophy } from '@phosphor-icons/react';
+import { ArrowLeft, CaretLeft, CaretRight, CaretUp, Heart, Lightning, Pause, Skull, Trophy } from '@phosphor-icons/react';
 import { PinataGame } from '../game/PinataGame';
 import { PinataGameRenderer } from '../game/PinataGameRenderer';
 import { InputHandler } from '../game/InputHandler';
+import { getViewportSize } from '../game/Constants';
 import { FlappyGame } from '../game/FlappyGame';
 import { BoboGame } from '../game/BoboGame';
 import { useAuth } from '../context/AuthContext';
@@ -68,11 +69,41 @@ const TUTORIALS = {
     }
 };
 
+/** Interpolate between two game states for smooth peer rendering (lerp positions only; rest from curr). */
+function interpolateState(prev, curr, alpha) {
+    if (!curr) return curr;
+    if (!prev || alpha >= 1) return curr;
+    if (alpha <= 0) return prev;
+    const a = Math.max(0, Math.min(1, alpha));
+    const out = { ...curr };
+    if (Array.isArray(curr.players) && Array.isArray(prev.players)) {
+        out.players = curr.players.map((p, i) => {
+            const q = prev.players[i];
+            if (!p || !q) return p;
+            return {
+                ...p,
+                x: q.x + (p.x - q.x) * a,
+                y: q.y + (p.y - q.y) * a
+            };
+        });
+    }
+    if (Array.isArray(curr.enemies) && Array.isArray(prev.enemies)) {
+        const prevById = new Map(prev.enemies.filter((e) => e?.id != null).map((e) => [e.id, e]));
+        out.enemies = curr.enemies.map((e) => {
+            const f = e?.id != null ? prevById.get(e.id) : null;
+            if (!f) return e;
+            return { ...e, x: f.x + (e.x - f.x) * a, y: f.y + (e.y - f.y) * a };
+        });
+    }
+    return out;
+}
+
 const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHost = false }) => {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const gameRef = useRef(null);
     const hostSocketRef = useRef(null);
+    const inputRef = useRef(null);
     const peerUsernameRef = useRef(null);
     const peerUsernameSentRef = useRef(false);
     const peerPunchClickRef = useRef(false);
@@ -140,43 +171,48 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
         const isMultiplayerHost = roomId && isHost;
         const isMultiplayerPeer = roomId && !isHost;
 
-        // --- Multiplayer peer: render from state, send input ---
+        // --- Multiplayer peer: render from state (with interpolation), send input; WebRTC when available, else socket ---
         if (isMultiplayerPeer) {
-            canvas.width = Math.max(300, window.innerWidth);
-            canvas.height = Math.max(200, window.innerHeight);
+            const { width, height } = getViewportSize();
+            canvas.width = width;
+            canvas.height = height;
             const renderer = new PinataGameRenderer(canvas);
             const stateRef = { current: null };
+            const statePrevRef = { current: null };
+            const stateCurrRef = { current: null };
+            const tPrevRef = { current: 0 };
+            const tCurrRef = { current: 0 };
             const input = new InputHandler();
+            inputRef.current = input;
             const socket = getSocket();
             const crumbRoom = `crumb_room:${roomId}`;
             socket.emit('join_room', crumbRoom);
+            console.log('[WebRTC peer] Joined room, requesting offer');
+            socket.emit('webrtc_request_offer');
+            const requestOfferInterval = setInterval(() => {
+                if (dataChannelRef.current?.readyState === 'open') {
+                    clearInterval(requestOfferInterval);
+                    return;
+                }
+                socket.emit('webrtc_request_offer');
+            }, 1500);
             socket.emit('peer_username', profile?.username || 'Player 2');
             if (profile?.username) peerUsernameSentRef.current = true;
             const lastClaimedMedkitX = { current: null };
             const lastClaimedUpgradeX = { current: null };
             let rafId = 0;
             let running = true;
+            let peerPc = null;
+            const dataChannelRef = { current: null };
+            const useWebRTCRef = { current: false };
 
-            const sendInput = () => {
-                const punch = input.isDown(' ') || peerPunchClickRef.current;
-                if (peerPunchClickRef.current) peerPunchClickRef.current = false;
-                const keys = {
-                    left: input.isDown('a') || input.isDown('arrowleft'),
-                    right: input.isDown('d') || input.isDown('arrowright'),
-                    jump: input.isDown('w') || input.isDown('arrowup'),
-                    punch
-                };
-                socket.emit('input', keys);
-            };
-
-            const doDraw = () => {
-                if (!running || !isMountedRef.current || !renderer.ctx) return;
-                if (stateRef.current) renderer.draw(stateRef.current);
-            };
-
-            socket.on('state', (s) => {
+            const applyState = (s) => {
+                if (!s) return;
+                statePrevRef.current = stateCurrRef.current;
+                stateCurrRef.current = s;
                 stateRef.current = s;
-                doDraw();
+                tPrevRef.current = tCurrRef.current;
+                tCurrRef.current = Date.now();
                 if (s?.gameOver && s?.currency != null) {
                     running = false;
                     gameOverRef.current = true;
@@ -194,8 +230,44 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                     }
                     setAssetsLoading(false);
                 }
-            });
+            };
 
+            const sendInput = () => {
+                const punch = input.isDown(' ') || peerPunchClickRef.current;
+                if (peerPunchClickRef.current) peerPunchClickRef.current = false;
+                const keys = {
+                    left: input.isDown('a') || input.isDown('arrowleft'),
+                    right: input.isDown('d') || input.isDown('arrowright'),
+                    jump: input.isDown('w') || input.isDown('arrowup'),
+                    punch
+                };
+                const dc = dataChannelRef.current;
+                if (dc?.readyState === 'open') {
+                    try { dc.send(JSON.stringify({ type: 'input', ...keys })); } catch (_) { /* ignore */ }
+                } else {
+                    socket.emit('input', keys);
+                }
+            };
+
+            const doDraw = () => {
+                if (!running || !isMountedRef.current || !renderer.ctx) return;
+                const curr = stateCurrRef.current;
+                if (!curr) return;
+                const prev = statePrevRef.current;
+                const tPrev = tPrevRef.current;
+                const tCurr = tCurrRef.current;
+                let toDraw = curr;
+                if (prev && tCurr > tPrev) {
+                    const alpha = Math.min(1, (Date.now() - tPrev) / (tCurr - tPrev));
+                    toDraw = interpolateState(prev, curr, alpha);
+                }
+                renderer.draw(toDraw);
+            };
+
+            socket.on('state', (s) => {
+                if (useWebRTCRef.current) return;
+                applyState(s);
+            });
             socket.on('host_left', () => {
                 running = false;
                 gameOverRef.current = true;
@@ -216,6 +288,87 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                 setAssetsLoading(false);
             });
 
+            const peerIceQueue = [];
+            const flushPeerIceQueue = async () => {
+                if (!peerPc?.remoteDescription) return;
+                while (peerIceQueue.length) {
+                    const c = peerIceQueue.shift();
+                    try {
+                        await peerPc.addIceCandidate(new RTCIceCandidate(c));
+                        console.log('[WebRTC peer] ICE candidate applied (from queue)');
+                    } catch (e) {
+                        console.warn('[WebRTC peer] addIceCandidate failed', e?.message || e);
+                    }
+                }
+            };
+
+            socket.on('webrtc_signal', async (data) => {
+                if (data?.type === 'ice') {
+                    console.log('[WebRTC peer] ICE candidate received');
+                    if (!peerPc) return;
+                    if (data.candidate) {
+                        if (peerPc.remoteDescription) {
+                            try {
+                                await peerPc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                                console.log('[WebRTC peer] ICE candidate applied');
+                            } catch (e) {
+                                console.warn('[WebRTC peer] addIceCandidate failed', e?.message || e);
+                            }
+                        } else {
+                            peerIceQueue.push(data.candidate);
+                        }
+                    }
+                    return;
+                }
+                if (data?.type !== 'offer' || peerPc) return;
+                console.log('[WebRTC peer] Offer received, creating RTCPeerConnection');
+                try {
+                    peerPc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                    peerPc.onconnectionstatechange = () => {
+                        console.log('[WebRTC peer] connectionState:', peerPc?.connectionState);
+                        if (peerPc?.connectionState === 'failed' || peerPc?.connectionState === 'disconnected' || peerPc?.connectionState === 'closed') {
+                            console.warn('[WebRTC peer] connection failed/disconnected – using socket fallback');
+                        }
+                    };
+                    peerPc.oniceconnectionstatechange = () => {
+                        console.log('[WebRTC peer] iceConnectionState:', peerPc?.iceConnectionState);
+                    };
+                    peerPc.ondatachannel = (e) => {
+                        const ch = e.channel;
+                        console.log('[WebRTC peer] Data channel received, label:', ch.label);
+                        dataChannelRef.current = ch;
+                        ch.onmessage = (ev) => {
+                            try {
+                                const d = JSON.parse(ev.data);
+                                if (d?.type === 'state') applyState(d.state);
+                            } catch (_) { /* ignore */ }
+                        };
+                        ch.onopen = () => {
+                            console.log('[WebRTC peer] Data channel OPEN – using WebRTC');
+                            useWebRTCRef.current = true;
+                        };
+                        ch.onclose = () => console.log('[WebRTC peer] Data channel closed');
+                        ch.onerror = (err) => console.warn('[WebRTC peer] Data channel error', err);
+                    };
+                    await peerPc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                    console.log('[WebRTC peer] Remote description set');
+                    await flushPeerIceQueue();
+                    const answer = await peerPc.createAnswer();
+                    await peerPc.setLocalDescription(answer);
+                    console.log('[WebRTC peer] Answer created and sent');
+                    socket.emit('webrtc_signal', { type: 'answer', sdp: peerPc.localDescription });
+                    peerPc.onicecandidate = (ev) => {
+                        if (ev.candidate) {
+                            console.log('[WebRTC peer] ICE candidate gathered, sending');
+                            socket.emit('webrtc_signal', { type: 'ice', candidate: ev.candidate });
+                        }
+                    };
+                } catch (err) {
+                    console.warn('[WebRTC peer] setup failed', err?.message || err, err);
+                    if (peerPc) { peerPc.close(); peerPc = null; }
+                }
+            });
+
             (async () => {
                 await renderer.loadAssets();
                 if (isMountedRef.current) {
@@ -224,8 +377,7 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                 }
             })();
 
-            const inputInterval = setInterval(sendInput, 50);
-            const renderInterval = setInterval(doDraw, 50);
+            const inputInterval = setInterval(sendInput, 30);
             const renderLoop = () => {
                 if (!running || !isMountedRef.current) return;
                 doDraw();
@@ -233,7 +385,6 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
             };
             rafId = requestAnimationFrame(renderLoop);
 
-            // Peer HUD: update from state (health, currency, notifications); re-send username when profile loads; claim medkit when P2 in range
             const peerHudInterval = setInterval(() => {
                 const s = stateRef.current;
                 if (s?.players?.[1]) {
@@ -271,11 +422,15 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                 isMountedRef.current = false;
                 running = false;
                 cancelAnimationFrame(rafId);
-                clearInterval(renderInterval);
+                clearInterval(requestOfferInterval);
                 clearInterval(inputInterval);
                 clearInterval(peerHudInterval);
                 socket.off('state');
                 socket.off('host_left');
+                socket.off('webrtc_signal');
+                if (peerPc) { peerPc.close(); peerPc = null; }
+                dataChannelRef.current = null;
+                inputRef.current = null;
                 input.destroy();
                 renderer.destroy();
                 gameRef.current = null;
@@ -290,6 +445,8 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
 
         let broadcastInterval = null;
         let crumbSocket = null;
+        let hostPc = null;
+        const hostDataChannelRef = { current: null };
 
         const game = new GameEngine(
             canvas,
@@ -305,14 +462,20 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                         const finalState = game.serializeState();
                         if (finalState) {
                             finalState.playerNames = playerNames || [profile?.username || 'Player 1', peerUsernameRef.current || 'Player 2'];
-                            crumbSocket.emit('state', {
+                            const payload = {
                                 ...finalState,
                                 gameOver: true,
                                 currency: total,
                                 peerCandies,
                                 hostCandies,
                                 multiplayerResult: { total, hostCandies, peerCandies, playerNames: finalState.playerNames }
-                            });
+                            };
+                            const dc = hostDataChannelRef?.current;
+                            if (dc?.readyState === 'open') {
+                                try { dc.send(JSON.stringify({ type: 'state', state: payload })); } catch (_) { /* ignore */ }
+                            } else {
+                                crumbSocket.emit('state', payload);
+                            }
                         }
                     }
                     setGameOver(true);
@@ -391,6 +554,7 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
         fetchBestScore();
 
         gameRef.current = game;
+        inputRef.current = game.input;
 
         if (isMultiplayerHost && roomId) {
             crumbSocket = getSocket();
@@ -415,16 +579,107 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                     gameRef.current.buyStatUpgradePeer(data.stat);
                 }
             });
-            crumbSocket.on('input', (payload) => {
+            const applyPeerInput = (payload) => {
                 if (game.peerInput && payload) {
                     game.peerInput.left = !!payload.left;
                     game.peerInput.right = !!payload.right;
                     game.peerInput.jump = !!payload.jump;
                     game.peerInput.punch = !!payload.punch;
                 }
-            });
+            };
+            crumbSocket.on('input', applyPeerInput);
             crumbSocket.on('peer_left', () => {
                 if (gameRef.current?.triggerGameOver) gameRef.current.triggerGameOver();
+            });
+
+            /* WebRTC often fails when: (1) both peers on same machine (localhost) – ICE can be flaky,
+               (2) strict NAT/firewall without TURN, (3) signaling order/race. Socket fallback is used when DC never opens. */
+
+            const hostIceQueue = [];
+            const flushHostIceQueue = async () => {
+                if (!hostPc?.remoteDescription) return;
+                while (hostIceQueue.length) {
+                    const c = hostIceQueue.shift();
+                    try {
+                        await hostPc.addIceCandidate(new RTCIceCandidate(c));
+                        console.log('[WebRTC host] ICE candidate applied (from queue)');
+                    } catch (e) {
+                        console.warn('[WebRTC host] addIceCandidate failed', e?.message || e);
+                    }
+                }
+            };
+
+            const sendOffer = async () => {
+                if (hostPc) {
+                    console.log('[WebRTC host] request_offer ignored (already have PC)');
+                    return;
+                }
+                console.log('[WebRTC host] request_offer received, creating offer');
+                try {
+                    hostPc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                    hostPc.onconnectionstatechange = () => {
+                        console.log('[WebRTC host] connectionState:', hostPc?.connectionState);
+                        if (hostPc?.connectionState === 'failed' || hostPc?.connectionState === 'disconnected' || hostPc?.connectionState === 'closed') {
+                            console.warn('[WebRTC host] connection failed/disconnected – using socket fallback');
+                        }
+                    };
+                    hostPc.oniceconnectionstatechange = () => {
+                        console.log('[WebRTC host] iceConnectionState:', hostPc?.iceConnectionState);
+                    };
+                    const dc = hostPc.createDataChannel('game');
+                    hostDataChannelRef.current = dc;
+                    console.log('[WebRTC host] Data channel created, label:', dc.label);
+                    dc.onmessage = (ev) => {
+                        try {
+                            const d = JSON.parse(ev.data);
+                            if (d?.type === 'input' && gameRef.current?.peerInput) applyPeerInput(d);
+                        } catch (_) { /* ignore */ }
+                    };
+                    dc.onopen = () => console.log('[WebRTC host] Data channel OPEN – using WebRTC');
+                    dc.onclose = () => console.log('[WebRTC host] Data channel closed');
+                    dc.onerror = (err) => console.warn('[WebRTC host] Data channel error', err);
+                    const offer = await hostPc.createOffer();
+                    await hostPc.setLocalDescription(offer);
+                    console.log('[WebRTC host] Offer created and sent');
+                    crumbSocket.emit('webrtc_signal', { type: 'offer', sdp: hostPc.localDescription });
+                    hostPc.onicecandidate = (ev) => {
+                        if (ev.candidate) {
+                            console.log('[WebRTC host] ICE candidate gathered, sending');
+                            crumbSocket.emit('webrtc_signal', { type: 'ice', candidate: ev.candidate });
+                        }
+                    };
+                } catch (err) {
+                    console.warn('[WebRTC host] setup failed', err?.message || err, err);
+                    if (hostPc) { hostPc.close(); hostPc = null; }
+                }
+            };
+            crumbSocket.on('webrtc_request_offer', sendOffer);
+            crumbSocket.on('webrtc_signal', async (data) => {
+                if (data?.type === 'ice') {
+                    console.log('[WebRTC host] ICE candidate received');
+                    if (!hostPc || !data.candidate) return;
+                    try {
+                        if (hostPc.remoteDescription) {
+                            await hostPc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                            console.log('[WebRTC host] ICE candidate applied');
+                        } else {
+                            hostIceQueue.push(data.candidate);
+                        }
+                    } catch (e) {
+                        console.warn('[WebRTC host] addIceCandidate failed', e?.message || e);
+                    }
+                    return;
+                }
+                if (data?.type === 'answer' && hostPc) {
+                    console.log('[WebRTC host] Answer received, setting remote description');
+                    try {
+                        await hostPc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                        await flushHostIceQueue();
+                        console.log('[WebRTC host] Remote description set');
+                    } catch (e) {
+                        console.warn('[WebRTC host] setRemoteDescription failed', e?.message || e);
+                    }
+                }
             });
         }
 
@@ -444,11 +699,15 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                                 const names = [profile?.username || 'Player 1', peerUsernameRef.current || 'Player 2'];
                                 game.playerNames = names;
                                 const state = game.serializeState();
-                                if (state) {
-                                    state.playerNames = names;
+                                if (!state) return;
+                                state.playerNames = names;
+                                const dc = hostDataChannelRef?.current;
+                                if (dc?.readyState === 'open') {
+                                    try { dc.send(JSON.stringify({ type: 'state', state })); } catch (_) { /* ignore */ }
+                                } else {
                                     crumbSocket?.emit('state', state);
                                 }
-                            }, 50);
+                            }, 30);
                         }
                     }
                 }
@@ -516,6 +775,8 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
             hostSocketRef.current = null;
             clearInterval(hudInterval);
             if (broadcastInterval) clearInterval(broadcastInterval);
+            if (hostPc) { hostPc.close(); hostPc = null; }
+            hostDataChannelRef.current = null;
             if (crumbSocket) {
                 crumbSocket.off('input');
                 crumbSocket.off('claim_medkit');
@@ -523,9 +784,12 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                 crumbSocket.off('buy_stat');
                 crumbSocket.off('peer_username');
                 crumbSocket.off('peer_left');
+                crumbSocket.off('webrtc_request_offer');
+                crumbSocket.off('webrtc_signal');
             }
             if (game) game.stop();
             gameRef.current = null;
+            inputRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [gameType, user?.id, roomId, isHost]);
@@ -920,95 +1184,97 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
                 </div>
             )}
 
-            {/* Tutorial overlay — shown before game starts */}
+            {/* Tutorial overlay — scrollable card that fits on page */}
             {showTutorial && !gameOver && !assetsLoading && (
                 <div className={`tutorial-overlay mode-${gameType}`}>
                     <div className="tutorial-card">
-                        <h2 className="tutorial-title">How to Play</h2>
-                        <h3 className="tutorial-game-name">{TUTORIALS[gameType]?.title ?? gameType}</h3>
-                        <div className="tutorial-section">
-                            <span className="tutorial-label">Controls</span>
-                            <ul className="tutorial-list">
-                                {(TUTORIALS[gameType]?.controls ?? []).map((c, i) => (
-                                    <li key={i}>{c}</li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div className="tutorial-section">
-                            <span className="tutorial-label">Goal</span>
-                            <p className="tutorial-goal">{TUTORIALS[gameType]?.goal ?? ''}</p>
-                            {gameType === 'flappy' && <p className="tutorial-lives-subtitle">You have 2 lives.</p>}
-                        </div>
-                        {gameType === 'pinata' && TUTORIALS.pinata.upgrades && (
-                            <div className="tutorial-section tutorial-upgrades">
-                                <span className="tutorial-label">Upgrades</span>
-                                <p className="tutorial-upgrades-subtitle">Spawns on ground</p>
-                                <div className="tutorial-upgrades-grid">
-                                    {TUTORIALS.pinata.upgrades.map((u, i) => (
-                                        <div key={i} className="tutorial-upgrade-item">
-                                            <img src={u.img} alt="" className="tutorial-upgrade-img" />
-                                            <div className="tutorial-upgrade-text">
-                                                <strong>{u.label}</strong>
-                                                <span>{u.desc}</span>
-                                            </div>
-                                        </div>
+                        <div className="tutorial-card-inner">
+                            <h2 className="tutorial-title">How to Play</h2>
+                            <h3 className="tutorial-game-name">{TUTORIALS[gameType]?.title ?? gameType}</h3>
+                            <div className="tutorial-section">
+                                <span className="tutorial-label">Controls</span>
+                                <ul className="tutorial-list">
+                                    {(TUTORIALS[gameType]?.controls ?? []).map((c, i) => (
+                                        <li key={i}>{c}</li>
                                     ))}
-                                </div>
-                                <p className="tutorial-goal tutorial-upgrades-note">{TUTORIALS.pinata.upgradesNote}</p>
+                                </ul>
                             </div>
-                        )}
-                        {gameType === 'flappy' && TUTORIALS.flappy.upgrades && (
-                            <div className="tutorial-section tutorial-upgrades">
-                                <span className="tutorial-label">Upgrades</span>
-                                <div className="tutorial-upgrades-grid">
-                                    {TUTORIALS.flappy.upgrades.map((u, i) => (
-                                        <div key={i} className="tutorial-upgrade-item">
-                                            <img src={u.img} alt="" className="tutorial-upgrade-img" />
-                                            <div className="tutorial-upgrade-text">
-                                                <strong>{u.label}</strong>
-                                                <span>{u.desc}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                            <div className="tutorial-section">
+                                <span className="tutorial-label">Goal</span>
+                                <p className="tutorial-goal">{TUTORIALS[gameType]?.goal ?? ''}</p>
+                                {gameType === 'flappy' && <p className="tutorial-lives-subtitle">You have 2 lives.</p>}
                             </div>
-                        )}
-                        {gameType === 'cake' && (TUTORIALS.cake.catch?.length || TUTORIALS.cake.avoid?.length || TUTORIALS.cake.special?.length) && (
-                            <div className="tutorial-section tutorial-upgrades">
-                                <span className="tutorial-label">Catch (sweets)</span>
-                                <div className="tutorial-icons-row">
-                                    {TUTORIALS.cake.catch.map((s, i) => (
-                                        <div key={i} className="tutorial-icon-item" title={s.label}>
-                                            <img src={s.img} alt="" className="tutorial-icon-img" />
-                                            <span className="tutorial-icon-label">{s.label}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                <span className="tutorial-label">Avoid (veggies)</span>
-                                <div className="tutorial-icons-row">
-                                    {TUTORIALS.cake.avoid.map((v, i) => (
-                                        <div key={i} className="tutorial-icon-item tutorial-avoid" title={v.label}>
-                                            <img src={v.img} alt="" className="tutorial-icon-img" />
-                                            <span className="tutorial-icon-label">{v.label}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                {TUTORIALS.cake.special?.length > 0 && (
-                                    <>
-                                        <span className="tutorial-label">Special</span>
-                                        <div className="tutorial-icons-row tutorial-special-row">
-                                            {TUTORIALS.cake.special.map((s, i) => (
-                                                <div key={i} className="tutorial-icon-item" title={s.label}>
-                                                    <img src={s.img} alt="" className="tutorial-icon-img" />
-                                                    <span className="tutorial-icon-label">{s.label}</span>
-                                                    {s.desc && <span className="tutorial-icon-desc">{s.desc}</span>}
+                            {gameType === 'pinata' && TUTORIALS.pinata.upgrades && (
+                                <div className="tutorial-section tutorial-upgrades">
+                                    <span className="tutorial-label">Upgrades</span>
+                                    <p className="tutorial-upgrades-subtitle">Spawns on ground</p>
+                                    <div className="tutorial-upgrades-grid">
+                                        {TUTORIALS.pinata.upgrades.map((u, i) => (
+                                            <div key={i} className="tutorial-upgrade-item">
+                                                <img src={u.img} alt="" className="tutorial-upgrade-img" />
+                                                <div className="tutorial-upgrade-text">
+                                                    <strong>{u.label}</strong>
+                                                    <span>{u.desc}</span>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="tutorial-goal tutorial-upgrades-note">{TUTORIALS.pinata.upgradesNote}</p>
+                                </div>
+                            )}
+                            {gameType === 'flappy' && TUTORIALS.flappy.upgrades && (
+                                <div className="tutorial-section tutorial-upgrades">
+                                    <span className="tutorial-label">Upgrades</span>
+                                    <div className="tutorial-upgrades-grid">
+                                        {TUTORIALS.flappy.upgrades.map((u, i) => (
+                                            <div key={i} className="tutorial-upgrade-item">
+                                                <img src={u.img} alt="" className="tutorial-upgrade-img" />
+                                                <div className="tutorial-upgrade-text">
+                                                    <strong>{u.label}</strong>
+                                                    <span>{u.desc}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {gameType === 'cake' && (TUTORIALS.cake.catch?.length || TUTORIALS.cake.avoid?.length || TUTORIALS.cake.special?.length) && (
+                                <div className="tutorial-section tutorial-upgrades">
+                                    <span className="tutorial-label">Catch (sweets)</span>
+                                    <div className="tutorial-icons-row">
+                                        {TUTORIALS.cake.catch.map((s, i) => (
+                                            <div key={i} className="tutorial-icon-item" title={s.label}>
+                                                <img src={s.img} alt="" className="tutorial-icon-img" />
+                                                <span className="tutorial-icon-label">{s.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <span className="tutorial-label">Avoid (veggies)</span>
+                                    <div className="tutorial-icons-row">
+                                        {TUTORIALS.cake.avoid.map((v, i) => (
+                                            <div key={i} className="tutorial-icon-item tutorial-avoid" title={v.label}>
+                                                <img src={v.img} alt="" className="tutorial-icon-img" />
+                                                <span className="tutorial-icon-label">{v.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {TUTORIALS.cake.special?.length > 0 && (
+                                        <>
+                                            <span className="tutorial-label">Special</span>
+                                            <div className="tutorial-icons-row tutorial-special-row">
+                                                {TUTORIALS.cake.special.map((s, i) => (
+                                                    <div key={i} className="tutorial-icon-item" title={s.label}>
+                                                        <img src={s.img} alt="" className="tutorial-icon-img" />
+                                                        <span className="tutorial-icon-label">{s.label}</span>
+                                                        {s.desc && <span className="tutorial-icon-desc">{s.desc}</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                         <button
                             className="tutorial-start-btn"
                             onClick={(e) => {
@@ -1024,6 +1290,67 @@ const GameCanvas = ({ gameType, onBack, isUpdating = false, roomId = null, isHos
             )}
 
             <canvas ref={canvasRef} className="game-canvas" />
+
+            {/* On-screen D-pad / action buttons for mobile (touch) */}
+            <div className="mobile-controls" aria-hidden>
+                {(gameType === 'pinata' || gameType === 'cake') && (
+                    <div className="mobile-dpad">
+                        <button
+                            type="button"
+                            className="mobile-dpad-btn mobile-dpad-left"
+                            onPointerDown={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('left', true); }}
+                            onPointerUp={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('left', false); }}
+                            onPointerLeave={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('left', false); }}
+                            onPointerCancel={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('left', false); }}
+                            aria-label="Move left"
+                        >
+                            <CaretLeft size={28} weight="bold" />
+                        </button>
+                        <button
+                            type="button"
+                            className="mobile-dpad-btn mobile-dpad-right"
+                            onPointerDown={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('right', true); }}
+                            onPointerUp={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('right', false); }}
+                            onPointerLeave={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('right', false); }}
+                            onPointerCancel={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('right', false); }}
+                            aria-label="Move right"
+                        >
+                            <CaretRight size={28} weight="bold" />
+                        </button>
+                        <button
+                            type="button"
+                            className="mobile-dpad-btn mobile-dpad-jump"
+                            onPointerDown={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('jump', true); }}
+                            onPointerUp={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('jump', false); }}
+                            onPointerLeave={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('jump', false); }}
+                            onPointerCancel={(e) => { e.preventDefault(); inputRef.current?.setVirtualKey('jump', false); }}
+                            aria-label="Jump"
+                        >
+                            <CaretUp size={28} weight="bold" />
+                        </button>
+                    </div>
+                )}
+                {(gameType === 'pinata' || gameType === 'flappy') && (
+                    <button
+                        type="button"
+                        className={`mobile-action-btn ${gameType === 'flappy' ? 'mobile-action-flap' : ''}`}
+                        onPointerDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (gameOver || isPaused || showVisibilityPauseOverlay) return;
+                            if (roomId && !isHost) {
+                                peerPunchClickRef.current = true;
+                            } else if (gameRef.current) {
+                                gameRef.current.handleInput('attack');
+                            }
+                        }}
+                        onPointerUp={(e) => e.preventDefault()}
+                        aria-label={gameType === 'flappy' ? 'Flap' : 'Punch'}
+                    >
+                        <Lightning size={gameType === 'flappy' ? 32 : 26} weight="bold" />
+                    </button>
+                )}
+            </div>
         </div>
     );
 };

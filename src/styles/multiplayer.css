@@ -108,10 +108,16 @@
 .multiplayer-join {
     display: flex;
     gap: 0.5rem;
+    min-width: 0;
+}
+
+.multiplayer-join .multiplayer-btn {
+    flex-shrink: 0;
 }
 
 .multiplayer-input {
     flex: 1;
+    min-width: 0;
     padding: 0.75rem 1rem;
     border: 3px solid #2d2d2d;
     border-radius: 12px;
@@ -220,10 +226,12 @@
     border: 3px solid #2d2d2d;
     border-radius: 20px;
     padding: 1.5rem 2rem;
-    max-width: 420px;
+    max-width: min(420px, calc(100vw - 2rem));
     width: 100%;
+    min-width: 0;
     position: relative;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+    box-sizing: border-box;
 }
 
 .multiplayer-modal-close {
@@ -263,4 +271,20 @@
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
+}
+
+/* Narrow viewports: stack input + Join so button never overflows */
+@media (max-width: 380px) {
+    .multiplayer-modal {
+        padding: 1rem 1.25rem;
+    }
+    .multiplayer-join {
+        flex-direction: column;
+    }
+    .multiplayer-join .multiplayer-input {
+        width: 100%;
+    }
+    .multiplayer-join .multiplayer-btn {
+        width: 100%;
+    }
 }

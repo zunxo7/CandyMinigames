@@ -1,5 +1,5 @@
 import { InputHandler } from './InputHandler';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from './Constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, getViewportSize } from './Constants';
 import crumbUrl from '../assets/Crumb.webp';
 import enemyUrl from '../assets/Evil Pinata.webp';
 import candyUrl from '../assets/Candy Icon.webp';
@@ -11,16 +11,18 @@ export class Game {
     constructor(canvas, onGameOver) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.width = window.innerWidth;
-        this.height = window.innerHeight;
+        const { width, height } = getViewportSize();
+        this.width = width;
+        this.height = height;
         this.onGameOver = onGameOver;
 
         this.canvas.width = this.width;
         this.canvas.height = this.height;
 
         this.resizeHandler = () => {
-            this.width = window.innerWidth;
-            this.height = window.innerHeight;
+            const size = getViewportSize();
+            this.width = size.width;
+            this.height = size.height;
             this.canvas.width = this.width;
             this.canvas.height = this.height;
         };

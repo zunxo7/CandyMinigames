@@ -43,6 +43,7 @@
     justify-content: center;
     gap: 0.6rem;
     padding: 0.8rem 1.5rem;
+    flex-shrink: 0;
     background: transparent;
     border: 3px solid transparent;
     color: #666;
@@ -1380,4 +1381,106 @@
 .games-config-actions .admin-btn-primary:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* Hamburger: hidden on desktop */
+.admin-tabs-hamburger,
+.admin-tabs-backdrop,
+.admin-tabs-dropdown {
+    display: none;
+}
+
+/* Desktop: show pill tabs, hide hamburger */
+.admin-tabs-container .admin-tabs {
+    display: flex;
+}
+
+/* Mobile: hamburger menu */
+@media (max-width: 768px) {
+    .admin-tabs-container {
+        padding: 1rem 1rem 0.5rem;
+        position: relative;
+    }
+
+    .admin-tabs-hamburger {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background: white;
+        border: 3px solid #2d2d2d;
+        border-radius: 16px;
+        font-weight: 800;
+        font-size: 1rem;
+        color: #2d2d2d;
+        cursor: pointer;
+        box-shadow: 0 4px 0 #2d2d2d;
+    }
+    .admin-tabs-hamburger span {
+        flex: 1;
+        text-align: left;
+    }
+
+    .admin-tabs-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 40;
+    }
+
+    .admin-tabs-dropdown {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        top: 100%;
+        left: 1rem;
+        right: 1rem;
+        margin-top: 0.5rem;
+        background: white;
+        border: 3px solid #2d2d2d;
+        border-radius: 16px;
+        padding: 0.5rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        z-index: 50;
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+    .admin-tabs-dropdown:not(.open) {
+        display: none;
+    }
+    .admin-tabs-dropdown.open {
+        display: flex;
+    }
+    .admin-tabs-dropdown .admin-tab {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 0.75rem 1rem;
+        font-size: 0.95rem;
+        border-radius: 12px;
+    }
+
+    .admin-tabs-container .admin-tabs {
+        display: none;
+    }
+
+    /* Remove PC margin so content fits on phone */
+    .admin-content {
+        padding: 1rem 0.75rem 1.5rem 0.75rem;
+    }
+    .admin-section-header {
+        padding: 1rem 1rem;
+    }
+    .admin-header {
+        padding: 0.75rem 1rem;
+    }
+    .admin-grid-layout {
+        gap: 0.75rem;
+    }
+    .admin-card,
+    .event-card,
+    .events-group-header-card {
+        padding: 1rem;
+    }
 }

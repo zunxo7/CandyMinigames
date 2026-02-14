@@ -15,7 +15,7 @@ const Leaderboard = ({ onBack }) => {
 
     useEffect(() => {
         fetchLeaderboard();
-    }, [category, profile?.is_blacklisted]);
+    }, [category, profile?.is_blacklisted, profile?.username]);
 
     const fetchLeaderboard = async () => {
         setLoading(true);
@@ -61,14 +61,17 @@ const Leaderboard = ({ onBack }) => {
                 }
             }
         } else {
-            // Normal fetch: exclude blacklisted users so no one sees them on leaderboard
+            // Admin or zunnoon: include blacklisted users; others: exclude blacklisted
+            const un = profile?.username?.toLowerCase();
+            const includeBlacklisted = un === 'admin' || un === ZUNNOON_USERNAME;
             if (category === 'overall') {
-                const response = await supabase
+                let query = supabase
                     .from('profiles')
-                    .select('id, username, candies')
-                    .eq('is_blacklisted', false)
+                    .select('id, username, candies, is_blacklisted')
                     .order('candies', { ascending: false })
-                    .limit(50);
+                    .limit(includeBlacklisted ? 80 : 50);
+                if (!includeBlacklisted) query = query.eq('is_blacklisted', false);
+                const response = await query;
                 data = response.data;
                 error = response.error;
             } else {
@@ -83,14 +86,15 @@ const Leaderboard = ({ onBack }) => {
                     .limit(80);
                 error = response.error;
                 if (data = response.data) {
-                    data = data
-                        .filter(item => !item.profiles?.is_blacklisted)
+                    const filtered = includeBlacklisted ? data : data.filter(item => !item.profiles?.is_blacklisted);
+                    data = filtered
                         .slice(0, 50)
                         .map(item => ({
                             id: item.profiles?.id,
                             username: item.profiles?.username,
                             score: item.high_score,
-                            candies: item.profiles?.candies
+                            candies: item.profiles?.candies,
+                            is_blacklisted: item.profiles?.is_blacklisted
                         }));
                 }
             }
@@ -102,7 +106,8 @@ const Leaderboard = ({ onBack }) => {
             const list = (data || []).filter(p => p && (p.username || '').toLowerCase() !== 'admin');
             setPlayers(list.map(p => ({
                 ...p,
-                score: category === 'overall' ? p.candies : p.score
+                score: category === 'overall' ? p.candies : p.score,
+                is_blacklisted: p.is_blacklisted ?? false
             })));
         }
         setLoading(false);
@@ -222,6 +227,9 @@ const Leaderboard = ({ onBack }) => {
                                             <span className="player-username">
                                                 {player.username}
                                                 {player.id === user?.id && <span className="you-tag">YOU</span>}
+                                                {(profile?.username?.toLowerCase() === 'admin' || profile?.username?.toLowerCase() === ZUNNOON_USERNAME) && player.is_blacklisted && (
+                                                    <span className="leaderboard-blacklisted-tag" title="Blacklisted (hidden from non-admins)">BL</span>
+                                                )}
                                             </span>
                                         </div>
                                     </div>

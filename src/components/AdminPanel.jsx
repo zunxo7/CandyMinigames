@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning, GameController, ArrowCounterClockwise, Prohibit } from '@phosphor-icons/react';
+import { ArrowLeft, Storefront, Megaphone, Plus, MagicWand, Users, Trash, Cake, Heart, Confetti, Gear, DotsSixVertical, Warning, GameController, ArrowCounterClockwise, Prohibit, List } from '@phosphor-icons/react';
 import { supabase } from '../supabase';
 import ContentEditor from './ContentEditor';
 import AnnouncementManager from './AnnouncementManager';
@@ -52,6 +52,7 @@ const AdminPanel = ({ onBack }) => {
     const { config: gameConfig, saveConfig, refreshConfig } = useGameConfig();
     const [gamesConfigDirty, setGamesConfigDirty] = useState({ flappy: {}, pinata: {}, cake: {} });
     const [gamesSaveStatus, setGamesSaveStatus] = useState(null); // 'saving' | 'saved' | 'error'
+    const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
 
     const showToast = (message, type = 'success') => {
         setToastMessage({ message, type });
@@ -644,8 +645,39 @@ const AdminPanel = ({ onBack }) => {
                 <div className="header-spacer"></div>
             </div>
 
-            {/* Tabs */}
+            {/* Tabs: hamburger menu on mobile, pill tabs on desktop */}
             <div className="admin-tabs-container">
+                <button
+                    type="button"
+                    className="admin-tabs-hamburger"
+                    onClick={() => setTabsMenuOpen((o) => !o)}
+                    aria-expanded={tabsMenuOpen}
+                    aria-label="Open sections menu"
+                >
+                    <List size={24} weight="bold" />
+                    <span>{activeTab === 'shop' ? 'Shop' : activeTab === 'announcements' ? 'Announcements' : activeTab === 'events' ? 'Events' : activeTab === 'games' ? 'Games' : 'Users'}</span>
+                </button>
+                {tabsMenuOpen && (
+                    <div className="admin-tabs-backdrop" onClick={() => setTabsMenuOpen(false)} aria-hidden />
+                )}
+                <div className={`admin-tabs-dropdown ${tabsMenuOpen ? 'open' : ''}`}>
+                    {[
+                        { id: 'shop', Icon: Storefront, label: 'Shop' },
+                        { id: 'announcements', Icon: Megaphone, label: 'Announcements' },
+                        { id: 'events', Icon: MagicWand, label: 'Events' },
+                        { id: 'games', Icon: GameController, label: 'Games' },
+                        { id: 'users', Icon: Users, label: 'Users' },
+                    ].map(({ id, Icon, label }) => (
+                        <button
+                            key={id}
+                            className={`admin-tab ${activeTab === id ? 'active' : ''}`}
+                            onClick={() => { setActiveTab(id); setTabsMenuOpen(false); }}
+                        >
+                            <Icon size={20} weight="fill" />
+                            <span>{label}</span>
+                        </button>
+                    ))}
+                </div>
                 <div className="admin-tabs">
                     <button
                         className={`admin-tab ${activeTab === 'shop' ? 'active' : ''}`}

@@ -10,39 +10,39 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1rem 2rem;
+    padding: var(--space-md) var(--space-lg);
     background: white;
-    border-bottom: 3px solid #2d2d2d;
+    border-bottom: 3px solid var(--border-dark);
 }
 
 .settings-header .page-title {
-    font-size: 1.5rem;
+    font-size: var(--text-xl);
     font-weight: 900;
-    color: #2d2d2d;
+    color: var(--text-primary);
     margin: 0;
 }
 
 .settings-header .header-spacer {
-    width: 48px;
+    width: clamp(40px, 6vw, 52px);
 }
 
 .settings-content {
     flex: 1;
-    padding: 2rem;
-    max-width: 520px;
+    padding: var(--space-md);
+    max-width: min(520px, 96vw);
     margin: 0 auto;
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: var(--space-md);
 }
 
 .settings-card {
     background: white;
-    border: 4px solid #2d2d2d;
-    border-radius: 20px;
-    padding: 1.5rem 1.75rem;
-    box-shadow: 0 6px 0 #2d2d2d;
+    border: 4px solid var(--border-dark);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md) var(--space-lg);
+    box-shadow: 0 6px 0 var(--border-dark);
 }
 
 .settings-row {
@@ -55,8 +55,8 @@
 
 .settings-label {
     font-weight: 700;
-    color: #2d2d2d;
-    font-size: 1rem;
+    color: var(--text-primary);
+    font-size: var(--text-base);
 }
 
 .settings-toggle {
